@@ -1,6 +1,7 @@
 import argparse
 import torch
 from torch import nn
+import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.distributions import Normal
 import torchvision
@@ -26,7 +27,7 @@ def forward_pass(net, num_steps, data):
   utils.reset(net)  # resets hidden states for all LIF neurons in net
 
   for step in range(num_steps):
-      spk_out, mem_out = net(data)
+      spk_out, mem_out = net(data[step])
       spk_rec.append(spk_out)
       mem_rec.append(mem_out)
 
@@ -48,33 +49,37 @@ def train(model: nn.Module,
           epochs: int = 3,
           k_entropy: float = 0,
           learning_rate: float = 0.01, 
-          timesteps: int = 10):
+          timesteps: int = 10,
+          num_classes: int = 10):
 
-    theta = torch.ones((2,)) # defines mean and logstd
+    theta = torch.ones((2,), requires_grad=True) # defines mean and logstd
 
     loss = nn.CrossEntropyLoss()
     model_optim = torch.optim.Adam(model.parameters(), lr=learning_rate)
     dist_optim = torch.optim.Adam(model.parameters(), lr=learning_rate)
     loss_hist = []
     test_loss_hist = []
-    num_epochs = 3
 
-    for epoch in range(num_epochs):
+    for epoch in range(epochs):
         counter = 0
 
         total_loss = 0
         prev_loss = 0
         
         for batch_data, batch_labels in train_loader:
+            batch_data = torch.movedim(batch_data, 1, 0) 
+            #print(model(batch_data))
             dist = Normal(theta[0], torch.exp(theta[1]))
-            temp = dist.sample()
+            #temp = dist.sample()
+            temp = 25
 
-            set_surrogate(model, snn.surrogate.FastSigmoid(slope=temp)) # todo: implement dspike
+            set_surrogate(model, snn.surrogate.fast_sigmoid(slope=temp)) # todo: implement dspike
 
             spikes_out, mem_out = forward_pass(model, timesteps, batch_data) 
             model_loss = torch.zeros(1, device=device, dtype=torch.float)
             for step in range(timesteps):
-                model_loss += loss(mem_out[step], batch_labels)
+                #print(spikes_out[step].dtype, F.one_hot(batch_labels, num_classes=num_classes).dtype)
+                model_loss += loss(mem_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32))
             model_optim.zero_grad()
             model_loss.backward()
             model_optim.step()
@@ -82,12 +87,13 @@ def train(model: nn.Module,
             total_loss += model_loss.item()
 
             loss_change = model_loss.detach() - prev_loss
-            dist_loss = (loss_change - dist.entropy()) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
-            dist_optim.zero_grad()
-            dist_loss.backward()
-            dist_optim.step()
+            #dist_loss = (loss_change - k_entropy * dist.entropy().detach()) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
+            #dist_optim.zero_grad()
+            #dist_loss.backward()
+            #dist_optim.step()
 
             prev_loss = model_loss.detach()
+            print(f'Loss: {model_loss.item()}')
         
         print(f'Test accuracy after {epoch} epochs: {test(model, test_loader)}')
         print(f'Average Loss: {total_loss / len(train_loader)}')
@@ -103,33 +109,33 @@ if __name__ == "__main__":
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--beta", default=0.5, type=float)
     parser.add_argument("--encoding", default="rate", type=str, choices=["rate", "temporal"])
-    
+
     args = parser.parse_args()
- 
+
+    transforms = [
+        v2.PILToTensor(),
+        v2.ToDtype(torch.float32),
+        v2.RandomResizedCrop(size=(224, 224)),
+    ]
+
     if(args.encoding == "rate"):
-        transform = v2.Compose([
-            v2.PILToTensor(),
-            v2.ToDtype(torch.float32),
-            v2.RandomResizedCrop(size=(224,224)),
-            snn_transforms.RateCodeTransform(timesteps=args.timesteps),
-        ])
+        transforms.append(snn_transforms.RateCodeTransform(timesteps=args.timesteps))
     if(args.encoding == "temporal"):
-        transform = v2.Compose([
-            v2.PILToTensor(),
-            v2.ToDtype(torch.float32),
-            v2.RandomResizedCrop(size=(224,224)),
-            snn_transforms.TemporalCodeTransform(timesteps=args.timesteps),
-        ])
-            
+        transforms.append(snn_transforms.TemporalCodeTransform(timesteps=args.timesteps))
+
     if(args.dataset == "CIFAR10"):
+        transform = v2.Compose(transforms)
         num_classes = 10
         train_data = datasets.CIFAR10(root="data/datasets/cifar10", train=True, download=True, transform=transform) 
         test_data = datasets.CIFAR10(root="data/datasets/cifar10", train=False, download=True, transform=transform) 
     if(args.dataset == "CIFAR100"):    
+        transform = v2.Compose(transforms)
         num_classes = 100
         train_data = datasets.CIFAR100(root="data/datasets/cifar100", train=True, download=True, transform=transform) 
         test_data = datasets.CIFAR100(root="data/datasets/cifar100", train=False, download=True, transform=transform) 
     if(args.dataset == "MNIST"):
+        transforms.insert(-1, v2.Grayscale(num_output_channels=3))
+        transform = v2.Compose(transforms)
         num_classes = 10
         train_data = datasets.MNIST(root="data/datasets/mnist", train=True, download=True, transform=transform) 
         test_data = datasets.MNIST(root="data/datasets/mnist", train=False, download=True, transform=transform) 
@@ -139,16 +145,14 @@ if __name__ == "__main__":
 
     if(args.arch == "resnet18"):
         model = models.spiking_resnet.resnet18(beta=args.beta, num_classes=num_classes)
+        # model = models.spiking_cnn.SpikingCNN()
     if(args.arch == "vgg16"):
-        raise Exception("hi we havent implemented vgg16 yet :(")
+        model = models.spiking_vgg.vgg16_bn(beta=args.beta, num_classes=num_classes)
 
     train(model, 
-          train_loader=train_data, 
-          test_loader=test_data,
+          train_loader=train_loader, 
+          test_loader=test_loader,
           epochs=args.epochs,
           k_entropy=0,
           learning_rate=args.learning_rate,
           timesteps=args.timesteps)
-
-
-

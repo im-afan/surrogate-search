@@ -28,6 +28,7 @@ def conv1x1(in_planes: int, out_planes: int, stride: int = 1) -> nn.Conv2d:
     """1x1 convolution"""
     return nn.Conv2d(in_planes, out_planes, kernel_size=1, stride=stride, bias=False)
 
+
 class BasicBlock(nn.Module):
     expansion: int = 1
 
@@ -65,7 +66,7 @@ class BasicBlock(nn.Module):
 
         out = self.conv1(x)
         out = self.bn1(out)
-        out = self.lif1(out)
+        out, _ = self.lif1(out)
 
         out = self.conv2(out)
         out = self.bn2(out)
@@ -74,7 +75,7 @@ class BasicBlock(nn.Module):
             identity = self.downsample(x)
 
         out += identity
-        out = self.lif2(out)
+        out, _ = self.lif2(out)
 
         return out
 
@@ -122,11 +123,11 @@ class Bottleneck(nn.Module):
 
         out = self.conv1(x)
         out = self.bn1(out)
-        out = self.lif1(out)
+        out, _ = self.lif1(out)
 
         out = self.conv2(out)
         out = self.bn2(out)
-        out = self.lif2(out)
+        out, _ = self.lif2(out)
 
         out = self.conv3(out)
         out = self.bn3(out)
@@ -135,7 +136,7 @@ class Bottleneck(nn.Module):
             identity = self.downsample(x)
 
         out += identity
-        out = self.lif3(out)
+        out, _ = self.lif3(out)
 
         return out
 
@@ -217,7 +218,7 @@ class ResNet(nn.Module):
             stride = 1
         if stride != 1 or self.inplanes != planes * block.expansion:
             downsample = nn.Sequential(
-                Leaky(beta=self.beta),
+                Leaky(beta=self.beta, init_hidden=True),
                 conv1x1(self.inplanes, planes * block.expansion, stride),
                 norm_layer(planes * block.expansion)
             )
@@ -245,10 +246,11 @@ class ResNet(nn.Module):
 
     def _forward_impl(self, x: Tensor) -> Tensor:
         # See note [TorchScript super()]
+        print(x.shape)
         x = self.conv1(x)
         x = self.bn1(x)
-        x = self.lif1(x)
         x = self.maxpool(x)
+        x, _ = self.lif1(x)
 
         x = self.layer1(x)
         x = self.layer2(x)
@@ -258,9 +260,9 @@ class ResNet(nn.Module):
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
         x = self.fc(x)
-        x = self.lif2(x)
+        spike_out, mem_out = self.lif2(x)
 
-        return x
+        return spike_out, mem_out
 
     def forward(self, x: Tensor) -> Tensor:
         return self._forward_impl(x)
