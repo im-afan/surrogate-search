@@ -91,7 +91,7 @@ def train(model: nn.Module,
             #std *= eps
             temp = dist.sample()
             if(not use_dynamic_surrogate):
-                temp = torch.tensor(0.5)
+                temp = torch.tensor(5)
             #set_surrogate(model, surrogates.atan_surrogate(width=0.5)) # todo: implement dspike
             #set_surrogate(model, snn.surrogate.fast_sigmoid(slope=25)) # todo: implement dspike
             #print(temp)
@@ -112,21 +112,24 @@ def train(model: nn.Module,
 
             total_loss += model_loss.item()
 
+
             loss_change = model_loss.detach() - prev_loss
-            dist_loss = (loss_change - k_entropy * dist.entropy().detach()) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
-            dist_optim.zero_grad()
-            dist_loss.backward()
-            #nn.utils.clip_grad_norm_([theta], 0.01)
-            dist_optim.step()
+            if(use_dynamic_surrogate):
+                dist_loss = (loss_change - k_entropy * dist.entropy().detach()) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
+                dist_optim.zero_grad()
+                dist_loss.backward()
+                #nn.utils.clip_grad_norm_([theta], 0.01)
+                dist_optim.step()
 
             prev_loss = model_loss.detach()
-            print(f'Loss: {model_loss.item()}, Normal params: {theta[0].item(), theta[1].item()} entropy: {dist.entropy().detach()}, temp: {temp.item()}, p(temp): {dist.log_prob(temp)}, dist loss: {dist_loss.item()}')
+            print(f'Loss: {model_loss.item()}, Normal params: {theta[0].item(), theta[1].item()}, temp: {temp.item()}')
             writer.add_scalar("Loss/train", model_loss.item(), train_steps)
             #print(f'Loss: {model_loss.item()}')
-        writer.flush()
-        
-        print(f'Test accuracy after {epoch} epochs: {test(model, test_loader, timesteps=timesteps)}')
+        acc = test(model, test_loader, timesteps=timesteps)
+        writer.add_scalar("Accuracy/test", acc)
+        print(f'Test accuracy after {epoch} epochs: {acc}')
         print(f'Average Loss: {total_loss / len(train_loader)}')
+    writer.flush()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
@@ -146,7 +149,7 @@ if __name__ == "__main__":
     transforms = [
         v2.PILToTensor(),
         v2.ToDtype(torch.float32),
-        #v2.RandomResizedCrop(size=(224, 224)),
+        v2.RandomResizedCrop(size=(224, 224)),
     ]
 
     if(args.encoding == "rate"):
@@ -165,7 +168,7 @@ if __name__ == "__main__":
         train_data = datasets.CIFAR100(root="data/datasets/cifar100", train=True, download=True, transform=transform) 
         test_data = datasets.CIFAR100(root="data/datasets/cifar100", train=False, download=True, transform=transform) 
     if(args.dataset == "MNIST"):
-        #transforms.insert(-1, snn_transforms.ExpandChannelsTransform())
+        transforms.insert(-1, snn_transforms.ExpandChannelsTransform())
         transform = v2.Compose(transforms)
         num_classes = 10
         train_data = datasets.MNIST(root="data/datasets/mnist", train=True, download=True, transform=transform) 
@@ -175,8 +178,8 @@ if __name__ == "__main__":
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=True)
 
     if(args.arch == "resnet18"):
-        #model = models.spiking_resnet.resnet18(beta=args.beta, num_classes=num_classes)
-        model = models.spiking_cnn.SpikingCNN()
+        model = models.spiking_resnet.resnet18(beta=args.beta, num_classes=num_classes)
+        #model = models.spiking_cnn.SpikingCNN()
     if(args.arch == "vgg16"):
         model = models.spiking_vgg.vgg16_bn(beta=args.beta, num_classes=num_classes)
     model = model.to(device)
