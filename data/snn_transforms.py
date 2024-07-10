@@ -30,3 +30,10 @@ class TemporalCodeTransform(Callable):
                                 threshold=self.threshold, 
                                 normalize=self.normalize, 
                                 linear=self.linear)
+
+class ExpandChannelsTransform(Callable):
+    def __init__(self):
+        pass
+
+    def __call__(self, img):
+        return img.repeat(3, 1, 1)

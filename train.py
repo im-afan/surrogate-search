@@ -33,11 +33,15 @@ def forward_pass(net, num_steps, data):
 
   return torch.stack(spk_rec), torch.stack(mem_rec)
 
-def test(model, test_loader):
+def test(model: nn.Module, test_loader: DataLoader, timesteps: int = 10):
   total = 0
   correct = 0
   for batch_data, batch_labels in test_loader:
-    spikes_out, _ = model(batch_data.view(batch_data.size()[0], -1))
+    batch_data = batch_data.to(device)
+    batch_labels = batch_labels.to(device)
+
+    batch_data = torch.movedim(batch_data, 1, 0) 
+    spikes_out, mem_out = forward_pass(model, timesteps, batch_data) 
     pred = spikes_out.sum(dim=0).argmax(1)
     total += len(batch_labels)
     correct += (pred == batch_labels).detach().cpu().sum().numpy()
@@ -47,16 +51,16 @@ def train(model: nn.Module,
           train_loader: DataLoader, 
           test_loader: DataLoader,
           epochs: int = 3,
-          k_entropy: float = 0,
+          k_entropy: float = 0.01,
           learning_rate: float = 0.01, 
           timesteps: int = 10,
           num_classes: int = 10):
 
-    theta = torch.ones((2,), requires_grad=True) # defines mean and logstd
+    theta = torch.tensor([25, 1], requires_grad=True, device=device, dtype=torch.float32)
 
     loss = nn.CrossEntropyLoss()
     model_optim = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    dist_optim = torch.optim.Adam(model.parameters(), lr=learning_rate)
+    dist_optim = torch.optim.Adam([theta], lr=0.1)
     loss_hist = []
     test_loss_hist = []
 
@@ -67,11 +71,14 @@ def train(model: nn.Module,
         prev_loss = 0
         
         for batch_data, batch_labels in train_loader:
+            batch_data = batch_data.to(device)
+            batch_labels = batch_labels.to(device)
+
             batch_data = torch.movedim(batch_data, 1, 0) 
             #print(model(batch_data))
             dist = Normal(theta[0], torch.exp(theta[1]))
-            #temp = dist.sample()
-            temp = 25
+            temp = dist.sample()
+            #temp = 25
 
             set_surrogate(model, snn.surrogate.fast_sigmoid(slope=temp)) # todo: implement dspike
 
@@ -87,15 +94,15 @@ def train(model: nn.Module,
             total_loss += model_loss.item()
 
             loss_change = model_loss.detach() - prev_loss
-            #dist_loss = (loss_change - k_entropy * dist.entropy().detach()) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
-            #dist_optim.zero_grad()
-            #dist_loss.backward()
-            #dist_optim.step()
+            dist_loss = (loss_change - k_entropy * dist.entropy().detach()) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
+            dist_optim.zero_grad()
+            dist_loss.backward()
+            dist_optim.step()
 
             prev_loss = model_loss.detach()
-            print(f'Loss: {model_loss.item()}')
+            print(f'Loss: {model_loss.item()}, Normal params: {theta}, change loss: {loss_change}, entropy: {dist.entropy().detach()}')
         
-        print(f'Test accuracy after {epoch} epochs: {test(model, test_loader)}')
+        print(f'Test accuracy after {epoch} epochs: {test(model, test_loader, timesteps=timesteps)}')
         print(f'Average Loss: {total_loss / len(train_loader)}')
 
 if __name__ == "__main__":
@@ -115,7 +122,7 @@ if __name__ == "__main__":
     transforms = [
         v2.PILToTensor(),
         v2.ToDtype(torch.float32),
-        v2.RandomResizedCrop(size=(224, 224)),
+        #v2.RandomResizedCrop(size=(224, 224)),
     ]
 
     if(args.encoding == "rate"):
@@ -134,7 +141,7 @@ if __name__ == "__main__":
         train_data = datasets.CIFAR100(root="data/datasets/cifar100", train=True, download=True, transform=transform) 
         test_data = datasets.CIFAR100(root="data/datasets/cifar100", train=False, download=True, transform=transform) 
     if(args.dataset == "MNIST"):
-        transforms.insert(-1, v2.Grayscale(num_output_channels=3))
+        #transforms.insert(-1, snn_transforms.ExpandChannelsTransform())
         transform = v2.Compose(transforms)
         num_classes = 10
         train_data = datasets.MNIST(root="data/datasets/mnist", train=True, download=True, transform=transform) 
@@ -144,10 +151,11 @@ if __name__ == "__main__":
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=True)
 
     if(args.arch == "resnet18"):
-        model = models.spiking_resnet.resnet18(beta=args.beta, num_classes=num_classes)
-        # model = models.spiking_cnn.SpikingCNN()
+        #model = models.spiking_resnet.resnet18(beta=args.beta, num_classes=num_classes)
+        model = models.spiking_cnn.SpikingCNN()
     if(args.arch == "vgg16"):
         model = models.spiking_vgg.vgg16_bn(beta=args.beta, num_classes=num_classes)
+    model = model.to(device)
 
     train(model, 
           train_loader=train_loader, 
