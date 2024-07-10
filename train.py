@@ -4,6 +4,7 @@ from torch import nn
 import torch.nn.functional as F
 from torch.utils.data import DataLoader
 from torch.distributions import Normal
+from torch.utils.tensorboard import SummaryWriter
 import torchvision
 from torchvision import datasets
 from torchvision.transforms import v2
@@ -11,6 +12,7 @@ import numpy as np
 import snntorch as snn
 from snntorch.surrogate import FastSigmoid
 from snntorch import utils
+from surrogates import atan_surrogate, tanh_surrogate 
 from data import snn_transforms
 import models
 
@@ -51,18 +53,24 @@ def train(model: nn.Module,
           train_loader: DataLoader, 
           test_loader: DataLoader,
           epochs: int = 3,
-          k_entropy: float = 0.01,
+          k_entropy: float = 0.1,
           learning_rate: float = 0.01, 
           timesteps: int = 10,
-          num_classes: int = 10):
+          num_classes: int = 10, 
+          use_dynamic_surrogate: bool = True):
 
-    theta = torch.tensor([25, 1], requires_grad=True, device=device, dtype=torch.float32)
+    theta = torch.tensor([0.1, -5], requires_grad=True, device=device, dtype=torch.float32)
 
+    writer = SummaryWriter()
     loss = nn.CrossEntropyLoss()
-    model_optim = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    dist_optim = torch.optim.Adam([theta], lr=0.1)
+    model_optim = torch.optim.SGD(model.parameters(), lr=learning_rate)
+    dist_optim = torch.optim.SGD([theta], lr=0.01)
     loss_hist = []
     test_loss_hist = []
+    eps = 1-1e-4
+    std = 0.1
+
+    train_steps = 0
 
     for epoch in range(epochs):
         counter = 0
@@ -71,16 +79,22 @@ def train(model: nn.Module,
         prev_loss = 0
         
         for batch_data, batch_labels in train_loader:
+            train_steps += 1
+
             batch_data = batch_data.to(device)
             batch_labels = batch_labels.to(device)
 
             batch_data = torch.movedim(batch_data, 1, 0) 
             #print(model(batch_data))
             dist = Normal(theta[0], torch.exp(theta[1]))
+            std *= eps
             temp = dist.sample()
-            #temp = 25
-
-            set_surrogate(model, snn.surrogate.fast_sigmoid(slope=temp)) # todo: implement dspike
+            temp = max(temp, 0)
+            if(not use_dynamic_surrogate):
+                temp = torch.tensor(0.1)
+            #set_surrogate(model, atan_surrogate(width=temp)) # todo: implement dspike
+            set_surrogate(model, snn.surrogate.fast_sigmoid(slope=25)) # todo: implement dspike
+            #set_surrogate(model, tanh_surrogate(width=torch.abs(temp)))
 
             spikes_out, mem_out = forward_pass(model, timesteps, batch_data) 
             model_loss = torch.zeros(1, device=device, dtype=torch.float)
@@ -89,6 +103,7 @@ def train(model: nn.Module,
                 model_loss += loss(mem_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32))
             model_optim.zero_grad()
             model_loss.backward()
+            #nn.utils.clip_grad_norm_(model.parameters(), 0.01)
             model_optim.step()
 
             total_loss += model_loss.item()
@@ -97,10 +112,14 @@ def train(model: nn.Module,
             dist_loss = (loss_change - k_entropy * dist.entropy().detach()) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
             dist_optim.zero_grad()
             dist_loss.backward()
+            #nn.utils.clip_grad_norm_([theta], 0.01)
             dist_optim.step()
 
             prev_loss = model_loss.detach()
-            print(f'Loss: {model_loss.item()}, Normal params: {theta}, change loss: {loss_change}, entropy: {dist.entropy().detach()}')
+            print(f'Loss: {model_loss.item()}, Normal params: {theta[0].item(), theta[1].item()} entropy: {dist.entropy().detach()}, temp: {temp.item()}, p(temp): {dist.log_prob(temp)}, dist loss: {dist_loss.item()}')
+            writer.add_scalar("Loss/train", model_loss.item(), train_steps)
+            #print(f'Loss: {model_loss.item()}')
+        writer.flush()
         
         print(f'Test accuracy after {epoch} epochs: {test(model, test_loader, timesteps=timesteps)}')
         print(f'Average Loss: {total_loss / len(train_loader)}')
@@ -116,6 +135,7 @@ if __name__ == "__main__":
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--beta", default=0.5, type=float)
     parser.add_argument("--encoding", default="rate", type=str, choices=["rate", "temporal"])
+    parser.add_argument("--use_dynamic_surrogate", default=1, type=int)
 
     args = parser.parse_args()
 
@@ -156,11 +176,11 @@ if __name__ == "__main__":
     if(args.arch == "vgg16"):
         model = models.spiking_vgg.vgg16_bn(beta=args.beta, num_classes=num_classes)
     model = model.to(device)
-
     train(model, 
           train_loader=train_loader, 
           test_loader=test_loader,
           epochs=args.epochs,
           k_entropy=0,
           learning_rate=args.learning_rate,
-          timesteps=args.timesteps)
+          timesteps=args.timesteps,
+          use_dynamic_surrogate=args.use_dynamic_surrogate)
