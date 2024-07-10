@@ -13,6 +13,7 @@ import snntorch as snn
 from snntorch.surrogate import FastSigmoid
 from snntorch import utils
 from surrogates import atan_surrogate, tanh_surrogate 
+import surrogates
 from data import snn_transforms
 import models
 
@@ -59,16 +60,16 @@ def train(model: nn.Module,
           num_classes: int = 10, 
           use_dynamic_surrogate: bool = True):
 
-    theta = torch.tensor([0.1, -5], requires_grad=True, device=device, dtype=torch.float32)
+    theta = torch.tensor([0.5, -4], requires_grad=True, device=device, dtype=torch.float32)
 
     writer = SummaryWriter()
     loss = nn.CrossEntropyLoss()
-    model_optim = torch.optim.SGD(model.parameters(), lr=learning_rate)
+    model_optim = torch.optim.Adam(model.parameters(), lr=learning_rate)
     dist_optim = torch.optim.SGD([theta], lr=0.01)
     loss_hist = []
     test_loss_hist = []
-    eps = 1-1e-4
-    std = 0.1
+    #eps = 1-1e-4
+    #std = 0.1
 
     train_steps = 0
 
@@ -87,24 +88,27 @@ def train(model: nn.Module,
             batch_data = torch.movedim(batch_data, 1, 0) 
             #print(model(batch_data))
             dist = Normal(theta[0], torch.exp(theta[1]))
-            std *= eps
+            #std *= eps
             temp = dist.sample()
-            temp = max(temp, 0)
             if(not use_dynamic_surrogate):
-                temp = torch.tensor(0.1)
-            #set_surrogate(model, atan_surrogate(width=temp)) # todo: implement dspike
-            set_surrogate(model, snn.surrogate.fast_sigmoid(slope=25)) # todo: implement dspike
-            #set_surrogate(model, tanh_surrogate(width=torch.abs(temp)))
+                temp = torch.tensor(0.5)
+            #set_surrogate(model, surrogates.atan_surrogate(width=0.5)) # todo: implement dspike
+            #set_surrogate(model, snn.surrogate.fast_sigmoid(slope=25)) # todo: implement dspike
+            #print(temp)
+            #set_surrogate(model, surrogates.tanh_surrogate(width=0.5))
+            set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.tanh_surrogate1(width=temp)))
 
             spikes_out, mem_out = forward_pass(model, timesteps, batch_data) 
             model_loss = torch.zeros(1, device=device, dtype=torch.float)
             for step in range(timesteps):
                 #print(spikes_out[step].dtype, F.one_hot(batch_labels, num_classes=num_classes).dtype)
                 model_loss += loss(mem_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32))
-            model_optim.zero_grad()
-            model_loss.backward()
-            #nn.utils.clip_grad_norm_(model.parameters(), 0.01)
-            model_optim.step()
+
+            with torch.autograd.set_detect_anomaly(True): 
+                model_optim.zero_grad()
+                model_loss.backward()
+                #nn.utils.clip_grad_norm_(model.parameters(), 0.01)
+                model_optim.step()
 
             total_loss += model_loss.item()
 
