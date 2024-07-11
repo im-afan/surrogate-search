@@ -16,6 +16,7 @@ from surrogates import atan_surrogate, tanh_surrogate
 import surrogates
 from data import snn_transforms
 import models
+import time
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -131,6 +132,12 @@ def train(model: nn.Module,
                 print(f'Loss: {model_loss.item()}, Normal params: {theta[0].item(), theta[1].item()}, temp: {temp.item()}')
             writer.add_scalar("Loss/train", model_loss.item(), train_steps)
             #print(f'Loss: {model_loss.item()}')
+        format_string = '%Y-%m-%d_%H:%M:%S'
+        cur_time = time.strftime(format_string, time.gmtime())
+        if(use_dynamic_surrogate):
+            torch.save(model.state_dict(), "runs/saves/dynamic_surrogate_" + cur_time + ".pt")
+        else:
+            torch.save(model.state_dict(), "runs/saves/static_surrogate_" + cur_time + ".pt")
         acc = test(model, test_loader, timesteps=timesteps)
         writer.add_scalar("Accuracy/test", acc)
         print(f'Test accuracy after {epoch} epochs: {acc}')
