@@ -62,12 +62,12 @@ def train(model: nn.Module,
           num_classes: int = 10, 
           use_dynamic_surrogate: bool = True):
 
-    theta = torch.tensor([5, -4], requires_grad=True, device=device, dtype=torch.float32)
+    theta = torch.tensor([1, -4], requires_grad=True, device=device, dtype=torch.float32)
 
     writer = SummaryWriter()
     loss = nn.CrossEntropyLoss()
     model_optim = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    dist_optim = torch.optim.SGD([theta], lr=0.01)
+    dist_optim = torch.optim.SGD([theta], lr=0.001)
     loss_hist = []
     test_loss_hist = []
     #eps = 1-1e-4
@@ -93,7 +93,7 @@ def train(model: nn.Module,
             #std *= eps
             temp = dist.sample()
             if(not use_dynamic_surrogate):
-                temp = torch.tensor(5)
+                temp = torch.tensor(1)
             #set_surrogate(model, surrogates.atan_surrogate(width=0.5)) # todo: implement dspike
             #set_surrogate(model, snn.surrogate.fast_sigmoid(slope=25)) # todo: implement dspike
             #print(temp)
