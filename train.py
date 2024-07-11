@@ -96,7 +96,7 @@ def train(model: nn.Module,
             #set_surrogate(model, snn.surrogate.fast_sigmoid(slope=25)) # todo: implement dspike
             #print(temp)
             #set_surrogate(model, surrogates.tanh_surrogate(width=0.5))
-            set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.tanh_surrogate1(width=temp)))
+            set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.tanh_surrogate1(width=torch.abs(temp))))
 
             spikes_out, mem_out = forward_pass(model, timesteps, batch_data) 
             model_loss = torch.zeros(1, device=device, dtype=torch.float)
@@ -122,7 +122,8 @@ def train(model: nn.Module,
                 dist_optim.step()
 
             prev_loss = model_loss.detach()
-            print(f'Loss: {model_loss.item()}, Normal params: {theta[0].item(), theta[1].item()}, temp: {temp.item()}')
+            if(train_steps % 50 == 0):
+                print(f'Loss: {model_loss.item()}, Normal params: {theta[0].item(), theta[1].item()}, temp: {temp.item()}')
             writer.add_scalar("Loss/train", model_loss.item(), train_steps)
             #print(f'Loss: {model_loss.item()}')
         acc = test(model, test_loader, timesteps=timesteps)
@@ -149,7 +150,7 @@ if __name__ == "__main__":
     transforms = [
         v2.PILToTensor(),
         v2.ToDtype(torch.float32),
-        v2.RandomResizedCrop(size=(224, 224)),
+        #v2.RandomResizedCrop(size=(224, 224)),
     ]
 
     if(args.encoding == "rate"):
