@@ -85,6 +85,14 @@ def train(model: nn.Module,
         total_loss = 0
         prev_loss = 0
         
+        format_string = '%Y-%m-%d_%H:%M:%S'
+        cur_time = time.strftime(format_string, time.gmtime())
+        if(use_dynamic_surrogate):
+            torch.save(model.state_dict(), "runs/saves/dynamic_surrogate_" + cur_time + ".pt")
+        else:
+            torch.save(model.state_dict(), "runs/saves/static_surrogate_" + cur_time + ".pt")
+
+        
         for batch_data, batch_labels in train_loader:
             train_steps += 1
 
