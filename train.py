@@ -21,7 +21,9 @@ device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def set_surrogate(model: nn.Module, surrogate):
     for module in model.modules():
-        if(type(module) == snn.Leaky):
+        #if(type(module) == snn.Leaky):
+        if(isinstance(module, snn.Leaky)):
+            #print("replace lol")
             module.spike_grad = surrogate
 
 def forward_pass(net, num_steps, data):
@@ -60,7 +62,7 @@ def train(model: nn.Module,
           num_classes: int = 10, 
           use_dynamic_surrogate: bool = True):
 
-    theta = torch.tensor([0.5, -4], requires_grad=True, device=device, dtype=torch.float32)
+    theta = torch.tensor([5, -4], requires_grad=True, device=device, dtype=torch.float32)
 
     writer = SummaryWriter()
     loss = nn.CrossEntropyLoss()
@@ -179,8 +181,8 @@ if __name__ == "__main__":
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=True)
 
     if(args.arch == "resnet18"):
-        model = models.spiking_resnet.resnet18(beta=args.beta, num_classes=num_classes)
-        #model = models.spiking_cnn.SpikingCNN()
+        #model = models.spiking_resnet.resnet18(beta=args.beta, num_classes=num_classes)
+        model = models.spiking_cnn.SpikingCNN()
     if(args.arch == "vgg16"):
         model = models.spiking_vgg.vgg16_bn(beta=args.beta, num_classes=num_classes)
     model = model.to(device)
