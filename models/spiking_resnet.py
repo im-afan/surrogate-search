@@ -9,7 +9,6 @@ from torch import Tensor
 import snntorch as snn
 from snntorch import Leaky
 from snntorch import utils
-from snntorch._layers.bntt import BatchNormTT1d, BatchNormTT2d
 
 def conv3x3(in_planes: int, out_planes: int, stride: int = 1, groups: int = 1, dilation: int = 1) -> nn.Conv2d:
     """3x3 convolution with padding"""
@@ -47,7 +46,7 @@ class BasicBlock(nn.Module):
     ) -> None:
         super().__init__()
         if norm_layer is None:
-            norm_layer = BatchNormTT2d 
+            norm_layer = nn.BatchNorm2d
         if groups != 1 or base_width != 64:
             raise ValueError("BasicBlock only supports groups=1 and base_width=64")
         if dilation > 1:
@@ -104,7 +103,7 @@ class Bottleneck(nn.Module):
     ) -> None:
         super().__init__()
         if norm_layer is None:
-            norm_layer = BatchNormTT2d 
+            norm_layer = nn.BatchNorm2d
         width = int(planes * (base_width / 64.0)) * groups
         # Both self.conv2 and self.downsample layers downsample the input when stride != 1
         self.conv1 = conv1x1(inplanes, width)
@@ -157,7 +156,7 @@ class ResNet(nn.Module):
     ) -> None:
         super().__init__()
         if norm_layer is None:
-            norm_layer = BatchNormTT2d 
+            norm_layer = nn.BatchNorm2d
         self._norm_layer = norm_layer
         self.beta=beta
 
