@@ -57,17 +57,20 @@ def train(model: nn.Module,
           test_loader: DataLoader,
           epochs: int = 3,
           k_entropy: float = 0.1,
-          learning_rate: float = 0.01, 
+          model_learning_rate: float = 0.01, 
+          dist_learning_rate: float = 0.001,
           timesteps: int = 10,
           num_classes: int = 10, 
-          use_dynamic_surrogate: bool = True):
+          use_dynamic_surrogate: bool = True,
+          mean: float = 1,
+          logstd: float = -4):
 
-    theta = torch.tensor([1, -4], requires_grad=True, device=device, dtype=torch.float32)
+    theta = torch.tensor([mean, logstd], requires_grad=True, device=device, dtype=torch.float32)
 
     writer = SummaryWriter()
     loss = nn.CrossEntropyLoss()
-    model_optim = torch.optim.Adam(model.parameters(), lr=learning_rate)
-    dist_optim = torch.optim.SGD([theta], lr=0.001)
+    model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
+    dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate)
     loss_hist = []
     test_loss_hist = []
     #eps = 1-1e-4
@@ -93,7 +96,7 @@ def train(model: nn.Module,
             #std *= eps
             temp = dist.sample()
             if(not use_dynamic_surrogate):
-                temp = torch.tensor(1)
+                temp = torch.tensor(logstd)
             #set_surrogate(model, surrogates.atan_surrogate(width=0.5)) # todo: implement dspike
             #set_surrogate(model, snn.surrogate.fast_sigmoid(slope=25)) # todo: implement dspike
             #print(temp)
@@ -139,13 +142,16 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", default="CIFAR10", type=str, choices=["CIFAR10", "CIFAR100", "MNIST"])
     parser.add_argument("--arch", default="resnet18", type=str, choices=["resnet18", "vgg16"])
     parser.add_argument("--batch_size", default=128, type=int)
-    parser.add_argument("--learning_rate", default=1e-3, type=float)
+    parser.add_argument("--model_learning_rate", default=1e-3, type=float)
+    parser.add_argument("--dist_learning_rate", default=1e-3, type=float)
     parser.add_argument("--epochs", default=10, type=int)
     parser.add_argument("--timesteps", default=10, type=int)
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--beta", default=0.5, type=float)
     parser.add_argument("--encoding", default="rate", type=str, choices=["rate", "temporal"])
     parser.add_argument("--use_dynamic_surrogate", default=1, type=int)
+    parser.add_argument("--initial_temp", default=1, type=float)
+    parser.add_argument("--initial_logstd", default=-4, type=float)
 
     args = parser.parse_args()
 
@@ -191,6 +197,9 @@ if __name__ == "__main__":
           test_loader=test_loader,
           epochs=args.epochs,
           k_entropy=0,
-          learning_rate=args.learning_rate,
+          model_learning_rate=args.model_learning_rate,
+          dist_learning_rate=args.dist_learning_rate,
           timesteps=args.timesteps,
-          use_dynamic_surrogate=args.use_dynamic_surrogate)
+          use_dynamic_surrogate=args.use_dynamic_surrogate,
+          mean=args.initial_temp,
+          logstd=args.initial_logstd)
