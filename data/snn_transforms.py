@@ -11,6 +11,7 @@ class RateCodeTransform(Callable):
         self.gain = gain
 
     def __call__(self, img):
+        #print(img)
         return spikegen.rate(img, num_steps=self.timesteps, gain=self.gain)
 
 class TemporalCodeTransform(Callable):

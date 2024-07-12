@@ -84,15 +84,7 @@ def train(model: nn.Module,
 
         total_loss = 0
         prev_loss = 0
-        
-        format_string = '%Y-%m-%d_%H:%M:%S'
-        cur_time = time.strftime(format_string, time.gmtime())
-        if(use_dynamic_surrogate):
-            torch.save(model.state_dict(), "runs/saves/dynamic_surrogate_" + cur_time + ".pt")
-        else:
-            torch.save(model.state_dict(), "runs/saves/static_surrogate_" + cur_time + ".pt")
-
-        
+            
         for batch_data, batch_labels in train_loader:
             train_steps += 1
 
@@ -176,19 +168,20 @@ if __name__ == "__main__":
         #v2.RandomResizedCrop(size=(224, 224)),
     ]
 
+    if(args.dataset == "CIFAR10" or args.dataset == "CIFAR100"):
+        transforms.append(v2.Normalize(mean=[0, 0, 0], std=[255, 255, 255]))
+
     if(args.encoding == "rate"):
         transforms.append(snn_transforms.RateCodeTransform(timesteps=args.timesteps))
     if(args.encoding == "temporal"):
         transforms.append(snn_transforms.TemporalCodeTransform(timesteps=args.timesteps))
 
     if(args.dataset == "CIFAR10"):
-        transforms.append(v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
         transform = v2.Compose(transforms)
         num_classes = 10
         train_data = datasets.CIFAR10(root="data/datasets/cifar10", train=True, download=True, transform=transform) 
         test_data = datasets.CIFAR10(root="data/datasets/cifar10", train=False, download=True, transform=transform) 
     if(args.dataset == "CIFAR100"):    
-        transforms.append(v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
         transform = v2.Compose(transforms)
         num_classes = 100
         train_data = datasets.CIFAR100(root="data/datasets/cifar100", train=True, download=True, transform=transform) 
