@@ -182,11 +182,13 @@ if __name__ == "__main__":
         transforms.append(snn_transforms.TemporalCodeTransform(timesteps=args.timesteps))
 
     if(args.dataset == "CIFAR10"):
+        transforms.append(v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
         transform = v2.Compose(transforms)
         num_classes = 10
         train_data = datasets.CIFAR10(root="data/datasets/cifar10", train=True, download=True, transform=transform) 
         test_data = datasets.CIFAR10(root="data/datasets/cifar10", train=False, download=True, transform=transform) 
     if(args.dataset == "CIFAR100"):    
+        transforms.append(v2.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]))
         transform = v2.Compose(transforms)
         num_classes = 100
         train_data = datasets.CIFAR100(root="data/datasets/cifar100", train=True, download=True, transform=transform) 
