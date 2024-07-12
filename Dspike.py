@@ -26,6 +26,13 @@ def atan_surrogate(width=25):
         return ATanSurrogate.apply(x, width)
     return inner
 
+def atan_surrogate1(width=25):
+    def atan_grad(input_, grad_input, spikes):
+        mem = input_
+        grad = (width/torch.pi) / (1 + (width*mem)) * grad_input
+        return grad
+    return atan_grad
+
 
 class DSpikeFunction(torch.autograd.Function):
     @staticmethod
@@ -53,3 +60,13 @@ def dspike(b=1.0):
     def inner(mem):
         return DSpikeFunction.apply(mem, b, c)
     return inner
+
+def dspike1(b=1.0):
+    b = torch.tensor(b)
+    c = torch.tensor(0.5)
+    def dspike_grad(input_, grad_input, spikes):
+        a = 1 / (torch.tanh(b * (1 - c)) - torch.tanh(b * (-c)))
+        grad = a * b * (1 - torch.tanh(b * (input_ - torch.ones_like(input_)*c))**2) * grad_input
+        
+        return grad
+    return dspike_grad

@@ -20,9 +20,9 @@ import itertools
 
 import argparse 
 
-import snn_transforms
+from data import snn_transforms
 import models 
-from Dspike import dspike, atan_surrogate
+from Dspike import dspike, atan_surrogate,  atan_surrogate1, dspike1
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
@@ -101,7 +101,7 @@ def train(
       temp = torch.tensor(candidate_temps[temp_idx], device=device, dtype=torch.float32)
       
       #set_surrogate(model, snn.surrogate.custom_surrogate(dspike(b=torch.abs(temp))))
-      set_surrogate(model, snn.surrogate.custom_surrogate(atan_surrogate(width=0.5)))
+      set_surrogate(model, snn.surrogate.custom_surrogate(dspike1(b=0.5)))
 
 
       spikes_out, mem_out = forward_pass(model, timesteps, batch_data)
