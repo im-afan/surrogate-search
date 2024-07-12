@@ -70,7 +70,8 @@ def train(model: nn.Module,
 
     writer = SummaryWriter()
     loss = nn.CrossEntropyLoss()
-    model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9)
+    #model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9)
+    model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
     dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate)
     loss_hist = []
     test_loss_hist = []
@@ -91,6 +92,7 @@ def train(model: nn.Module,
             batch_data = batch_data.to(device)
             batch_labels = batch_labels.to(device)
 
+            #print(batch_data)
             batch_data = torch.movedim(batch_data, 1, 0) 
             #print(model(batch_data))
             dist = Normal(theta[0], torch.exp(theta[1]))
