@@ -54,10 +54,10 @@ class BasicBlock(nn.Module):
         # Both self.conv1 and self.downsample layers downsample the input when stride != 1
         self.conv1 = conv3x3(inplanes, planes, stride)
         self.bn1 = norm_layer(planes)
-        self.lif1 = Leaky(beta=beta)
+        self.lif1 = Leaky(beta=beta, init_hidden=True)
         self.conv2 = conv3x3(planes, planes)
         self.bn2 = norm_layer(planes)
-        self.lif2 = Leaky(beta=beta)
+        self.lif2 = Leaky(beta=beta, init_hidden=True)
         self.downsample = downsample
         self.stride = stride
 
@@ -66,7 +66,7 @@ class BasicBlock(nn.Module):
 
         out = self.conv1(x)
         out = self.bn1(out)
-        out, _ = self.lif1(out)
+        out = self.lif1(out)
 
         out = self.conv2(out)
         out = self.bn2(out)
@@ -75,7 +75,7 @@ class BasicBlock(nn.Module):
             identity = self.downsample(x)
 
         out += identity
-        out, _ = self.lif2(out)
+        out = self.lif2(out)
 
         return out
 
@@ -108,13 +108,13 @@ class Bottleneck(nn.Module):
         # Both self.conv2 and self.downsample layers downsample the input when stride != 1
         self.conv1 = conv1x1(inplanes, width)
         self.bn1 = norm_layer(width)
-        self.lif1 = Leaky(beta=beta)
+        self.lif1 = Leaky(beta=beta, init_hidden=True)
         self.conv2 = conv3x3(width, width, stride, groups, dilation)
         self.bn2 = norm_layer(width)
-        self.lif2 = Leaky(beta=beta)
+        self.lif2 = Leaky(beta=beta, init_hidden=True)
         self.conv3 = conv1x1(width, planes * self.expansion)
         self.bn3 = norm_layer(planes * self.expansion)
-        self.lif3 = Leaky(beta=beta)
+        self.lif3 = Leaky(beta=beta, init_hidden=True)
         self.downsample = downsample
         self.stride = stride
 
@@ -123,11 +123,11 @@ class Bottleneck(nn.Module):
 
         out = self.conv1(x)
         out = self.bn1(out)
-        out, _ = self.lif1(out)
+        out = self.lif1(out)
 
         out = self.conv2(out)
         out = self.bn2(out)
-        out, _ = self.lif2(out)
+        out = self.lif2(out)
 
         out = self.conv3(out)
         out = self.bn3(out)
@@ -136,7 +136,7 @@ class Bottleneck(nn.Module):
             identity = self.downsample(x)
 
         out += identity
-        out, _ = self.lif3(out)
+        out = self.lif3(out)
 
         return out
 
@@ -175,7 +175,7 @@ class ResNet(nn.Module):
         self.base_width = width_per_group
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
         self.bn1 = norm_layer(self.inplanes)
-        self.lif1 = Leaky(beta=beta)
+        self.lif1 = Leaky(beta=beta, init_hidden=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=1)
         self.layer1 = self._make_layer(block, 64, layers[0])
         self.layer2 = self._make_layer(block, 128, layers[1], stride=2, dilate=replace_stride_with_dilation[0])
@@ -183,7 +183,7 @@ class ResNet(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2])
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
-        self.lif2 = Leaky(beta=beta)
+        self.lif2 = Leaky(beta=beta, init_hidden=False)
 
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
@@ -192,6 +192,7 @@ class ResNet(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
+        """
         # Zero-initialize the last BN in each residual branch,
         # so that the residual branch starts with zeros, and each residual block behaves like an identity.
         # This improves the model by 0.2~0.3% according to https://arxiv.org/abs/1706.02677
@@ -201,6 +202,7 @@ class ResNet(nn.Module):
                     nn.init.constant_(m.bn3.weight, 0)  # type: ignore[arg-type]
                 elif isinstance(m, BasicBlock) and m.bn2.weight is not None:
                     nn.init.constant_(m.bn2.weight, 0)  # type: ignore[arg-type]
+        """
 
     def _make_layer(
         self,
@@ -246,11 +248,11 @@ class ResNet(nn.Module):
 
     def _forward_impl(self, x: Tensor) -> Tensor:
         # See note [TorchScript super()]
-        print(x.shape)
+        # print(x.shape)
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.maxpool(x)
-        x, _ = self.lif1(x)
+        x = self.lif1(x)
 
         x = self.layer1(x)
         x = self.layer2(x)

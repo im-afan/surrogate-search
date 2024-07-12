@@ -11,7 +11,7 @@ class SpikingCNN(nn.Module):
         beta = 0.5
 
         # Initialize layers
-        self.conv1 = nn.Conv2d(1, 12, 5)
+        self.conv1 = nn.Conv2d(3, 12, 5)
         self.lif1 = snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True)
         self.conv2 = nn.Conv2d(12, 64, 5)
         self.lif2 = snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True)
