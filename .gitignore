@@ -1,4 +1,4 @@
 data/datasets/*
 __pycache__
 runs/tensorboard
-runs/saves/*
+runs/saves/*.pt
