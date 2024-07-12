@@ -12,11 +12,13 @@ import numpy as np
 import snntorch as snn
 from snntorch.surrogate import FastSigmoid
 from snntorch import utils
-from surrogates import atan_surrogate, tanh_surrogate 
+from surrogates import atan_surrogate, tanh_surrogate, dspike1, tanh_surrogate1
 import surrogates
 from data import snn_transforms
 import models
 import time
+from torch.distributions import Categorical
+
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -52,6 +54,71 @@ def test(model: nn.Module, test_loader: DataLoader, timesteps: int = 10):
     total += len(batch_labels)
     correct += (pred == batch_labels).detach().cpu().sum().numpy()
   return correct / total
+
+def train_categorical(
+    model: nn.Module, 
+    train_loader: DataLoader, 
+    test_loader: DataLoader,
+    epochs: int = 3,
+    k_entropy: float = 0.01,
+    learning_rate: float = 0.01, 
+    timesteps: int = 10,
+    num_classes: int = 10,
+    candidate_temps=[0.5, 1.0, 1.5, 2.0]
+): 
+  logits = torch.ones(len(candidate_temps), requires_grad=True, device=device, dtype = torch.float32)
+
+  loss = nn.CrossEntropyLoss()
+  model_optim = torch.optim.Adam(model.parameters(), lr=learning_rate)
+  dist_optim = torch.optim.Adam([logits], lr=0.1)
+  loss_hist = []
+  test_loss_hist = []
+
+  for epoch in range(epochs): 
+    counter = 0 
+    total_loss = 0
+    prev_loss = 0
+
+    for batch_data, batch_labels in train_loader: 
+      batch_data = batch_data.to(device)
+      batch_labels = batch_labels.to(device)
+
+      batch_data = torch.movedim(batch_data, 1,0)
+      print(batch_data.shape)
+
+      #sample temperature from categorical distribution 
+      probs = F.softmax(logits, dim=0)
+      dist = Categorical(probs)
+      temp_idx = dist.sample()
+      temp = torch.tensor(candidate_temps[temp_idx], device=device, dtype=torch.float32)
+      
+      #set_surrogate(model, snn.surrogate.custom_surrogate(dspike(b=torch.abs(temp))))
+      set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.dspike1(b=0.5)))
+
+
+      spikes_out, mem_out = forward_pass(model, timesteps, batch_data)
+      model_loss = torch.zeros(1, device=device, dtype=torch.float)
+      for step in range(timesteps):
+          model_loss += loss(mem_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32))
+      model_optim.zero_grad()
+      model_loss.backward()
+      model_optim.step()
+
+      total_loss += model_loss.item()
+
+      loss_change = model_loss.detach() - prev_loss
+      dist_loss = (loss_change - k_entropy * dist.entropy().detach()) * dist.log_prob(temp_idx)
+      dist_optim.zero_grad()
+      dist_loss.backward()
+      dist_optim.step()
+
+      prev_loss = model_loss.detach()
+      print(f'Loss: {model_loss.item()}, Categorical params: {logits}, change loss: {loss_change}, entropy: {dist.entropy().detach()}')
+    
+    print(f'Test accuracy after {epoch} epochs: {test(model, test_loader, timesteps=timesteps)}')
+    print(f'Average Loss: {total_loss / len(train_loader)}')
+
+
 
 def train(model: nn.Module, 
           train_loader: DataLoader, 

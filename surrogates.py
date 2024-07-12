@@ -69,3 +69,40 @@ def tanh_surrogate1(width=0.5):
         return grad
     
     return tanh_grad
+
+class DSpikeFunction(torch.autograd.Function):
+    @staticmethod
+    def forward(ctx, mem, b, c):
+        ctx.save_for_backward(mem)
+        ctx.b = b
+        ctx.c = c
+        
+        spk = (mem > 0).float()
+        return spk
+
+    @staticmethod
+    def backward(ctx, grad_output):
+        mem, = ctx.saved_tensors
+        b = ctx.b
+        c = ctx.c
+
+        a = 1 / (torch.tanh(b * (1 - c)) - torch.tanh(b * (-c)))
+        grad_input = a * b * (1 - torch.tanh(b * (mem - c))**2) * grad_output
+        
+        return grad_input, None, None
+
+def dspike(b=1.0):
+    c = 0.5
+    def inner(mem):
+        return DSpikeFunction.apply(mem, b, c)
+    return inner
+
+def dspike1(b=1.0):
+    b = torch.tensor(b)
+    c = torch.tensor(0.5)
+    def dspike_grad(input_, grad_input, spikes):
+        a = 1 / (torch.tanh(b * (1 - c)) - torch.tanh(b * (-c)))
+        grad = a * b * (1 - torch.tanh(b * (input_ - torch.ones_like(input_)*c))**2) * grad_input
+        
+        return grad
+    return dspike_grad
