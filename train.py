@@ -234,6 +234,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_dynamic_surrogate", default=1, type=int)
     parser.add_argument("--initial_temp", default=1, type=float)
     parser.add_argument("--initial_logstd", default=-4, type=float)
+    parser.add_argument("--training_type", default="train", type=str, choices=["train","train_categorical"])
 
     args = parser.parse_args()
 
@@ -277,14 +278,28 @@ if __name__ == "__main__":
     if(args.arch == "vgg16"):
         model = models.spiking_vgg.vgg16_bn(beta=args.beta, num_classes=num_classes)
     model = model.to(device)
-    train(model, 
-          train_loader=train_loader, 
-          test_loader=test_loader,
-          epochs=args.epochs,
-          k_entropy=0,
-          model_learning_rate=args.model_learning_rate,
-          dist_learning_rate=args.dist_learning_rate,
-          timesteps=args.timesteps,
-          use_dynamic_surrogate=args.use_dynamic_surrogate,
-          mean=args.initial_temp,
-          logstd=args.initial_logstd)
+
+    if(args.training_type == "train"): 
+        train(model, 
+              train_loader=train_loader, 
+              test_loader=test_loader,
+              epochs=args.epochs,
+              k_entropy=0,
+              model_learning_rate=args.model_learning_rate,
+              dist_learning_rate=args.dist_learning_rate,
+              timesteps=args.timesteps,
+              use_dynamic_surrogate=args.use_dynamic_surrogate,
+              mean=args.initial_temp,
+              logstd=args.initial_logstd)
+
+    if(args.training_type == "train_categorical"): 
+        candidate_temps = [5.0,10.0,15.0,25.0]
+        train_categorical(model, 
+        train_loader=train_loader, 
+        test_loader=test_loader,
+        epochs=3,
+        k_entropy=0,
+        learning_rate= 1e-3,
+        timesteps=10,
+        candidate_temps=candidate_temps
+    )
