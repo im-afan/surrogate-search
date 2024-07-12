@@ -70,9 +70,13 @@ def train(model: nn.Module,
 
     writer = SummaryWriter()
     loss = nn.CrossEntropyLoss()
-    #model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9)
-    model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
+    
+    model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=0.001)
+    model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
     dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate)
+    dist_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(dist_optim, eta_min=0, T_max=epochs)
+
+
     loss_hist = []
     test_loss_hist = []
     #eps = 1-1e-4
@@ -142,6 +146,8 @@ def train(model: nn.Module,
             torch.save(model.state_dict(), "runs/saves/static_surrogate_" + cur_time + ".pt")
         acc = test(model, test_loader, timesteps=timesteps)
         writer.add_scalar("Accuracy/test", acc)
+        model_scheduler.step()
+        dist_scheduler.step()
         print(f'Test accuracy after {epoch} epochs: {acc}')
         print(f'Average Loss: {total_loss / len(train_loader)}')
     writer.flush()
