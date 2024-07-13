@@ -8,6 +8,7 @@ from torch.utils.tensorboard import SummaryWriter
 import torchvision
 from torchvision import datasets
 from torchvision.transforms import v2
+from torchvision import transforms
 import numpy as np
 import snntorch as snn
 from snntorch.surrogate import FastSigmoid
@@ -18,6 +19,7 @@ from data import snn_transforms
 import models
 import time
 from torch.distributions import Categorical
+import matplotlib.pyplot as plt
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
@@ -137,7 +139,7 @@ def train(model: nn.Module,
     writer = SummaryWriter()
     loss = nn.CrossEntropyLoss()
     
-    model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=0.001)
+    model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
     #model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
     dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate)
     #dist_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(dist_optim, eta_min=0, T_max=epochs)
@@ -212,8 +214,8 @@ def train(model: nn.Module,
             torch.save(model.state_dict(), "runs/saves/static_surrogate_" + cur_time + ".pt")
         acc = test(model, test_loader, timesteps=timesteps)
         writer.add_scalar("Accuracy/test", acc)
-        model_scheduler.step()
-        dist_scheduler.step()
+        #model_scheduler.step()
+        #dist_scheduler.step()
         print(f'Test accuracy after {epoch} epochs: {acc}')
         print(f'Average Loss: {total_loss / len(train_loader)}')
     writer.flush()
@@ -237,39 +239,56 @@ if __name__ == "__main__":
 
     args = parser.parse_args()
 
-    transforms = [
-        v2.PILToTensor(),
-        v2.ToDtype(torch.float32),
-        #v2.RandomResizedCrop(size=(224, 224)),
+    CIFAR_MEAN = [0.49139968, 0.48215827, 0.44653124]
+    CIFAR_STD = [0.24703233, 0.24348505, 0.26158768]
+    transforms_list = [
+        transforms.RandomHorizontalFlip(),
+        transforms.RandomRotation(10),
+        transforms.ToTensor(),
+        transforms.Normalize(CIFAR_MEAN, CIFAR_STD)
+        #transforms.RandomResizedCrop(size=(224, 224)),
     ]
 
     if(args.dataset == "CIFAR10" or args.dataset == "CIFAR100"):
-        transforms.append(v2.Normalize(mean=[0, 0, 0], std=[255, 255, 255]))
+        transforms_list.append(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]))
 
     if(args.encoding == "rate"):
-        transforms.append(snn_transforms.RateCodeTransform(timesteps=args.timesteps))
+        transforms_list.append(snn_transforms.RateCodeTransform(timesteps=args.timesteps))
     if(args.encoding == "temporal"):
-        transforms.append(snn_transforms.TemporalCodeTransform(timesteps=args.timesteps))
+        transforms_list.append(snn_transforms.TemporalCodeTransform(timesteps=args.timesteps))
+
+    
 
     if(args.dataset == "CIFAR10"):
-        transform = v2.Compose(transforms)
+        transform = transforms.Compose(transforms_list)
         num_classes = 10
         train_data = datasets.CIFAR10(root="data/datasets/cifar10", train=True, download=True, transform=transform) 
         test_data = datasets.CIFAR10(root="data/datasets/cifar10", train=False, download=True, transform=transform) 
     if(args.dataset == "CIFAR100"):    
-        transform = v2.Compose(transforms)
+        transform = transforms.Compose(transforms_list)
         num_classes = 100
         train_data = datasets.CIFAR100(root="data/datasets/cifar100", train=True, download=True, transform=transform) 
         test_data = datasets.CIFAR100(root="data/datasets/cifar100", train=False, download=True, transform=transform) 
     if(args.dataset == "MNIST"):
-        transforms.insert(-1, snn_transforms.ExpandChannelsTransform())
-        transform = v2.Compose(transforms)
+        transforms_list.insert(-1, snn_transforms.ExpandChannelsTransform())
+        transform = transforms.Compose(transforms_list)
         num_classes = 10
         train_data = datasets.MNIST(root="data/datasets/mnist", train=True, download=True, transform=transform) 
         test_data = datasets.MNIST(root="data/datasets/mnist", train=False, download=True, transform=transform) 
 
     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=True)
+
+    """
+    batch, labels = next(iter(train_loader))
+    print(batch.shape)
+    img = torchvision.utils.make_grid(batch)
+    img = torch.movedim(img, 0, 2)
+    print(img.shape)
+    print(img)
+    plt.imshow(img)
+    plt.show()
+    """
 
     if(args.arch == "resnet18"):
         model = models.spiking_resnet.resnet18(beta=args.beta, num_classes=num_classes)
