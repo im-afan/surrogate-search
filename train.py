@@ -1,3 +1,4 @@
+import sys
 import argparse
 import torch
 from torch import nn
@@ -25,27 +26,28 @@ from torchvision.models import resnet18, vgg16_bn
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
-def set_surrogate(model: nn.Module, surrogate):
-    for module in model.modules():
+def set_surrogate(module: nn.Module, surrogate):
+    for name, child_module in module.named_children():
         #if(type(module) == snn.Leaky):
-        if(isinstance(module, nn.Sequential)):
-            set_surrogate(module, surrogate)
-        if(isinstance(module, snn.Leaky)):
+        if(isinstance(child_module, nn.Sequential)):
+            set_surrogate(child_module, surrogate)
+        if(isinstance(child_module, snn.Leaky)):
             #print("replace lol")
-            setattr(module, "spike_grad", surrogate)
+            setattr(child_module, "spike_grad", surrogate)
             #module.spike_grad = surrogate
 
 def forward_pass(net, num_steps, data):
-  mem_rec = []
+  #mem_rec = []
   spk_rec = []
   utils.reset(net)  # resets hidden states for all LIF neurons in net
 
   for step in range(num_steps):
-      spk_out, mem_out = net(data[step])
+      #spk_out, mem_out = net(data[step])
+      spk_out = net(data[step])
       spk_rec.append(spk_out)
-      mem_rec.append(mem_out)
+      #mem_rec.append(mem_out)
 
-  return torch.stack(spk_rec), torch.stack(mem_rec)
+  return torch.stack(spk_rec)#, torch.stack(mem_rec)
 
 def test(model: nn.Module, test_loader: DataLoader, timesteps: int = 10):
   total = 0
@@ -90,7 +92,7 @@ def train_categorical(
       batch_labels = batch_labels.to(device)
 
       batch_data = torch.movedim(batch_data, 1,0)
-      print(batch_data.shape)
+      #print(batch_data.shape)
 
       #sample temperature from categorical distribution 
       probs = F.softmax(logits, dim=0)
@@ -188,6 +190,7 @@ def train(model: nn.Module,
             model_loss = torch.zeros(1, device=device, dtype=torch.float)
             for step in range(timesteps):
                 #print(spikes_out[step].dtype, F.one_hot(batch_labels, num_classes=num_classes).dtype)
+                print(spikes_out.shape)
                 model_loss += loss(spikes_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32))
 
             with torch.autograd.set_detect_anomaly(True): 
@@ -297,12 +300,12 @@ if __name__ == "__main__":
     """
 
     if(args.arch == "resnet18"):
-        model = resnet18()
+        model = resnet18(num_classes=num_classes)
         #model = models.spiking_resnet.resnet18(beta=args.beta, num_classes=num_classes)
         #model = models.spiking_cnn.SpikingCNN()
     if(args.arch == "vgg16"):
-        model = vgg16_bn()
-        model = models.spiking_vgg.vgg16_bn(beta=args.beta, num_classes=num_classes)
+        model = vgg16_bn(num_classes=num_classes)
+        #model = models.spiking_vgg.vgg16_bn(beta=args.beta, num_classes=num_classes)
     if(args.arch == 'spikingcnn'):
         model = models.spiking_cnn_deep.SpikingCNNDeep()
 
