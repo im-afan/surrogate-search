@@ -10,6 +10,8 @@ import snntorch as snn
 from snntorch import Leaky
 from snntorch import utils
 
+from batchnorm import tdBatchNorm2d
+
 def conv3x3(in_planes: int, out_planes: int, stride: int = 1, groups: int = 1, dilation: int = 1) -> nn.Conv2d:
     """3x3 convolution with padding"""
     return nn.Conv2d(
@@ -46,7 +48,7 @@ class BasicBlock(nn.Module):
     ) -> None:
         super().__init__()
         if norm_layer is None:
-            norm_layer = nn.BatchNorm2d
+            norm_layer = tdBatchNorm2d 
         if groups != 1 or base_width != 64:
             raise ValueError("BasicBlock only supports groups=1 and base_width=64")
         if dilation > 1:
@@ -103,7 +105,7 @@ class Bottleneck(nn.Module):
     ) -> None:
         super().__init__()
         if norm_layer is None:
-            norm_layer = nn.BatchNorm2d
+            norm_layer = tdBatchNorm2d 
         width = int(planes * (base_width / 64.0)) * groups
         # Both self.conv2 and self.downsample layers downsample the input when stride != 1
         self.conv1 = conv1x1(inplanes, width)
@@ -156,7 +158,7 @@ class ResNet(nn.Module):
     ) -> None:
         super().__init__()
         if norm_layer is None:
-            norm_layer = nn.BatchNorm2d
+            norm_layer = tdBatchNorm2d 
         self._norm_layer = norm_layer
         self.beta=beta
 
@@ -188,7 +190,7 @@ class ResNet(nn.Module):
         for m in self.modules():
             if isinstance(m, nn.Conv2d):
                 nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
-            elif isinstance(m, (nn.BatchNorm2d, nn.GroupNorm)):
+            elif isinstance(m, (tdBatchNorm2d)):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
