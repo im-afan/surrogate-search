@@ -19,7 +19,6 @@ import models
 import time
 from torch.distributions import Categorical
 
-
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def set_surrogate(model: nn.Module, surrogate):
@@ -222,12 +221,12 @@ def train(model: nn.Module,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="CIFAR10", type=str, choices=["CIFAR10", "CIFAR100", "MNIST"])
-    parser.add_argument("--arch", default="resnet18", type=str, choices=["resnet18", "vgg16"])
+    parser.add_argument("--arch", default="resnet18", type=str, choices=["resnet18", "vgg16", "spikingcnn"])
     parser.add_argument("--batch_size", default=128, type=int)
     parser.add_argument("--model_learning_rate", default=1e-3, type=float)
     parser.add_argument("--dist_learning_rate", default=1e-3, type=float)
     parser.add_argument("--epochs", default=10, type=int)
-    parser.add_argument("--timesteps", default=10, type=int)
+    parser.add_argument("--timesteps", default=5, type=int)
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--beta", default=0.5, type=float)
     parser.add_argument("--encoding", default="rate", type=str, choices=["rate", "temporal"])
@@ -277,6 +276,8 @@ if __name__ == "__main__":
         #model = models.spiking_cnn.SpikingCNN()
     if(args.arch == "vgg16"):
         model = models.spiking_vgg.vgg16_bn(beta=args.beta, num_classes=num_classes)
+    if(args.arch == 'spikingcnn'):
+        model = models.spiking_cnn_deep.SpikingCNNDeep()
     model = model.to(device)
 
     if(args.training_type == "train"): 

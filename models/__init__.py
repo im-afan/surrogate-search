@@ -1,1 +1,1 @@
-from . import spiking_resnet, spiking_vgg, spiking_cnn
+from . import spiking_resnet, spiking_vgg, spiking_cnn, spiking_cnn_deep
