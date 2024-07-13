@@ -190,7 +190,7 @@ def train(model: nn.Module,
             model_loss = torch.zeros(1, device=device, dtype=torch.float)
             for step in range(timesteps):
                 #print(spikes_out[step].dtype, F.one_hot(batch_labels, num_classes=num_classes).dtype)
-                print(spikes_out.shape)
+                #print(spikes_out.shape)
                 model_loss += loss(spikes_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32))
 
             with torch.autograd.set_detect_anomaly(True): 
