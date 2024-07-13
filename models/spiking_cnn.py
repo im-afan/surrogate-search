@@ -12,11 +12,11 @@ class SpikingCNN(nn.Module):
 
         # Initialize layers
         self.conv1 = nn.Conv2d(3, 12, 5)
-        self.lif1 = snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True)
+        self.lif1 = nn.ReLU()
         self.conv2 = nn.Conv2d(12, 64, 5)
-        self.lif2 = snn.Leaky(beta=beta, spike_grad=spike_grad, init_hidden=True)
-        self.fc1 = nn.Linear(64*4*4, 10)
-        self.lif3 = snn.Leaky(beta=beta, spike_grad=spike_grad)
+        self.lif2 = nn.ReLU()
+        self.fc1 = nn.Linear(64*5*5, 10)
+        self.lif3 = nn.ReLU()
         self.flatten = nn.Flatten()
 
     def forward(self, x, batch_size=32):
@@ -30,6 +30,6 @@ class SpikingCNN(nn.Module):
 
         #print(spk2.shape, self.flatten(spk2).shape)
         cur3 = self.fc1(self.flatten(spk2))
-        spk3, mem3 = self.lif3(cur3)
+        spk3 = self.lif3(cur3)
 
-        return spk3, mem3
+        return spk3
