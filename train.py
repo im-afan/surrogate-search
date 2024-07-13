@@ -13,6 +13,7 @@ import numpy as np
 import snntorch as snn
 from snntorch.surrogate import FastSigmoid
 from snntorch import utils
+from models.to_spiking import to_spiking
 from surrogates import atan_surrogate, tanh_surrogate, dspike1, tanh_surrogate1
 import surrogates
 from data import snn_transforms
@@ -20,15 +21,19 @@ import models
 import time
 from torch.distributions import Categorical
 import matplotlib.pyplot as plt
+from torchvision.models import resnet18, vgg16_bn
 
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def set_surrogate(model: nn.Module, surrogate):
     for module in model.modules():
         #if(type(module) == snn.Leaky):
+        if(isinstance(module, nn.Sequential)):
+            set_surrogate(module, surrogate)
         if(isinstance(module, snn.Leaky)):
             #print("replace lol")
-            module.spike_grad = surrogate
+            setattr(module, "spike_grad", surrogate)
+            #module.spike_grad = surrogate
 
 def forward_pass(net, num_steps, data):
   mem_rec = []
@@ -178,11 +183,12 @@ def train(model: nn.Module,
             #set_surrogate(model, surrogates.tanh_surrogate(width=0.5))
             set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.tanh_surrogate1(width=torch.abs(temp))))
 
-            spikes_out, mem_out = forward_pass(model, timesteps, batch_data) 
+            #spikes_out, mem_out = forward_pass(model, timesteps, batch_data) 
+            spikes_out = forward_pass(model, timesteps, batch_data) 
             model_loss = torch.zeros(1, device=device, dtype=torch.float)
             for step in range(timesteps):
                 #print(spikes_out[step].dtype, F.one_hot(batch_labels, num_classes=num_classes).dtype)
-                model_loss += loss(mem_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32))
+                model_loss += loss(spikes_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32))
 
             with torch.autograd.set_detect_anomaly(True): 
                 model_optim.zero_grad()
@@ -291,12 +297,16 @@ if __name__ == "__main__":
     """
 
     if(args.arch == "resnet18"):
-        model = models.spiking_resnet.resnet18(beta=args.beta, num_classes=num_classes)
+        model = resnet18()
+        #model = models.spiking_resnet.resnet18(beta=args.beta, num_classes=num_classes)
         #model = models.spiking_cnn.SpikingCNN()
     if(args.arch == "vgg16"):
+        model = vgg16_bn()
         model = models.spiking_vgg.vgg16_bn(beta=args.beta, num_classes=num_classes)
     if(args.arch == 'spikingcnn'):
         model = models.spiking_cnn_deep.SpikingCNNDeep()
+
+    to_spiking(model) 
     model = model.to(device)
 
     if(args.training_type == "train"): 

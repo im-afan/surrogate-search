@@ -10,7 +10,7 @@ import snntorch as snn
 from snntorch import Leaky
 from snntorch import utils
 
-from batchnorm import tdBatchNorm2d
+from .batchnorm import tdBatchNorm2d
 
 def conv3x3(in_planes: int, out_planes: int, stride: int = 1, groups: int = 1, dilation: int = 1) -> nn.Conv2d:
     """3x3 convolution with padding"""
@@ -55,10 +55,10 @@ class BasicBlock(nn.Module):
             raise NotImplementedError("Dilation > 1 not supported in BasicBlock")
         # Both self.conv1 and self.downsample layers downsample the input when stride != 1
         self.conv1 = conv3x3(inplanes, planes, stride)
-        self.bn1 = norm_layer(planes)
+        self.bn1 = norm_layer(planes, alpha=1)
         self.lif1 = Leaky(beta=beta, init_hidden=True)
         self.conv2 = conv3x3(planes, planes)
-        self.bn2 = norm_layer(planes)
+        self.bn2 = norm_layer(planes, alpha=1)
         self.lif2 = Leaky(beta=beta, init_hidden=True)
         self.downsample = downsample
         self.stride = stride

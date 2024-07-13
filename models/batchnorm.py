@@ -12,8 +12,9 @@ class tdBatchNorm2d(nn.BatchNorm2d):
         track_running_stats (bool): same with nn.BatchNorm2d
     """
 
-    def __init__(self, bn: nn.BatchNorm2d, alpha: float):
-        super(tdBatchNorm2d, self).__init__(bn.num_features, bn.eps, bn.momentum, bn.affine, bn.track_running_stats)
+    def __init__(self, num_features: int, alpha: float):
+        #super(tdBatchNorm2d, self).__init__(bn.num_features, bn.eps, bn.momentum, bn.affine, bn.track_running_stats)
+        super(tdBatchNorm2d, self).__init__(num_features)
         self.alpha = alpha
         self.V_th = 0.5
         # self.weight.data = bn.weight.data
