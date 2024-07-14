@@ -50,18 +50,19 @@ def forward_pass(net, num_steps, data):
   return torch.stack(spk_rec)#, torch.stack(mem_rec)
 
 def test(model: nn.Module, test_loader: DataLoader, timesteps: int = 10):
-  total = 0
-  correct = 0
-  for batch_data, batch_labels in test_loader:
-    batch_data = batch_data.to(device)
-    batch_labels = batch_labels.to(device)
+  with torch.no_grad():
+    total = 0
+    correct = 0
+    for batch_data, batch_labels in test_loader:
+        batch_data = batch_data.to(device)
+        batch_labels = batch_labels.to(device)
 
-    batch_data = torch.movedim(batch_data, 1, 0) 
-    spikes_out = forward_pass(model, timesteps, batch_data) 
-    pred = spikes_out.sum(dim=0).argmax(1)
-    total += len(batch_labels)
-    correct += (pred == batch_labels).detach().cpu().sum().numpy()
-  return correct / total
+        batch_data = torch.movedim(batch_data, 1, 0) 
+        spikes_out = forward_pass(model, timesteps, batch_data) 
+        pred = spikes_out.sum(dim=0).argmax(1)
+        total += len(batch_labels)
+        correct += (pred == batch_labels).detach().cpu().sum().numpy()
+    return correct / total
 
 def train_categorical(
     model: nn.Module, 
@@ -138,7 +139,7 @@ def train(model: nn.Module,
           timesteps: int = 10,
           num_classes: int = 10, 
           use_dynamic_surrogate: bool = True,
-          mean: float = 1,
+          mean: float = 0.5,
           logstd: float = -4):
 
     theta = torch.tensor([mean, logstd], requires_grad=True, device=device, dtype=torch.float32)
@@ -250,40 +251,46 @@ if __name__ == "__main__":
 
     CIFAR_MEAN = [0.49139968, 0.48215827, 0.44653124]
     CIFAR_STD = [0.24703233, 0.24348505, 0.26158768]
-    transforms_list = [
+    transforms_list_train = [
+        transforms.RandomCrop(32, padding=4),
         transforms.RandomHorizontalFlip(),
-        transforms.RandomRotation(10),
         transforms.ToTensor(),
         transforms.Normalize(CIFAR_MEAN, CIFAR_STD)
         #transforms.RandomResizedCrop(size=(224, 224)),
     ]
 
-    if(args.dataset == "CIFAR10" or args.dataset == "CIFAR100"):
-        transforms_list.append(transforms.Normalize(mean=[0.5, 0.5, 0.5], std=[0.5, 0.5, 0.5]))
+    transforms_list_test = [
+        transforms.ToTensor(),
+        transforms.Normalize(CIFAR_MEAN, CIFAR_STD)
+    ]
 
     if(args.encoding == "rate"):
-        transforms_list.append(snn_transforms.RateCodeTransform(timesteps=args.timesteps))
+        transforms_list_train.append(snn_transforms.RateCodeTransform(timesteps=args.timesteps))
+        transforms_list_test.append(snn_transforms.RateCodeTransform(timesteps=args.timesteps))
     if(args.encoding == "temporal"):
-        transforms_list.append(snn_transforms.TemporalCodeTransform(timesteps=args.timesteps))
-
-    
+        transforms_list_train.append(snn_transforms.TemporalCodeTransform(timesteps=args.timesteps))
+        transforms_list_test.append(snn_transforms.TemporalCodeTransform(timesteps=args.timesteps))
 
     if(args.dataset == "CIFAR10"):
-        transform = transforms.Compose(transforms_list)
+        transform_train = transforms.Compose(transforms_list_train)
+        transform_test = transforms.Compose(transforms_list_test)
         num_classes = 10
-        train_data = datasets.CIFAR10(root="data/datasets/cifar10", train=True, download=True, transform=transform) 
-        test_data = datasets.CIFAR10(root="data/datasets/cifar10", train=False, download=True, transform=transform) 
+        train_data = datasets.CIFAR10(root="data/datasets/cifar10", train=True, download=True, transform=transform_train)
+        test_data = datasets.CIFAR10(root="data/datasets/cifar10", train=False, download=True, transform=transform_test) 
     if(args.dataset == "CIFAR100"):    
-        transform = transforms.Compose(transforms_list)
+        transform_train = transforms.Compose(transforms_list_train)
+        transform_test = transforms.Compose(transforms_list_test)
         num_classes = 100
-        train_data = datasets.CIFAR100(root="data/datasets/cifar100", train=True, download=True, transform=transform) 
-        test_data = datasets.CIFAR100(root="data/datasets/cifar100", train=False, download=True, transform=transform) 
+        train_data = datasets.CIFAR100(root="data/datasets/cifar100", train=True, download=True, transform=transform_train) 
+        test_data = datasets.CIFAR100(root="data/datasets/cifar100", train=False, download=True, transform=transform_test) 
     if(args.dataset == "MNIST"):
-        transforms_list.insert(-1, snn_transforms.ExpandChannelsTransform())
-        transform = transforms.Compose(transforms_list)
+        transforms_list_train.insert(-1, snn_transforms.ExpandChannelsTransform())
+        transforms_list_test.insert(-1, snn_transforms.ExpandChannelsTransform())
+        transform_train = transforms.Compose(transforms_list_train)
+        transform_test = transforms.Compose(transforms_list_test)
         num_classes = 10
-        train_data = datasets.MNIST(root="data/datasets/mnist", train=True, download=True, transform=transform) 
-        test_data = datasets.MNIST(root="data/datasets/mnist", train=False, download=True, transform=transform) 
+        train_data = datasets.MNIST(root="data/datasets/mnist", train=True, download=True, transform=transform_train) 
+        test_data = datasets.MNIST(root="data/datasets/mnist", train=False, download=True, transform=transform_test) 
 
     train_loader = DataLoader(train_data, batch_size=args.batch_size, shuffle=True)
     test_loader = DataLoader(test_data, batch_size=args.batch_size, shuffle=True)
