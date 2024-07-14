@@ -21,7 +21,31 @@ class tdBatchNorm2d(nn.BatchNorm2d):
         # self.running_mean.data = bn.running_mean.data
         # self.running_var.data = bn.running_var.data
 
+
     def forward(self, input):
+        # Ensure correct behavior in both training and evaluation modes
+        if self.training or not self.track_running_stats:
+            mean = input.mean(dim=[0, 2, 3], keepdim=True)
+            var = input.var(dim=[0, 2, 3], unbiased=False, keepdim=True)
+            
+            if self.training:
+                # Update running statistics
+                self.running_mean = (1 - self.momentum) * self.running_mean + self.momentum * mean.squeeze()
+                self.running_var = (1 - self.momentum) * self.running_var + self.momentum * var.squeeze()
+        else:
+            mean = self.running_mean.unsqueeze(0)
+            var = self.running_var.unsqueeze(0)
+
+        # Normalize input
+        input = self.alpha * self.V_th * (input - mean) / torch.sqrt(var + self.eps)
+
+        # Apply affine transformation if affine=True
+        if self.affine:
+            input = input * self.weight.unsqueeze(0) + self.bias.unsqueeze(0)
+
+        return input
+
+    def forward1(self, input):
         if False:
             # compulsory eval mode for normal bn
             self.training = False

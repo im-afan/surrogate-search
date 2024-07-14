@@ -143,6 +143,14 @@ class Bottleneck(nn.Module):
         return out
 
 
+import torch
+import torch.nn as nn
+from torch import Tensor
+from .batchnorm import tdBatchNorm2d
+from .resnet_blocks import BasicBlock, Bottleneck
+from snntorch import Leaky
+
+
 class ResNet(nn.Module):
     def __init__(
         self,
@@ -155,24 +163,20 @@ class ResNet(nn.Module):
         replace_stride_with_dilation: Optional[List[bool]] = None,
         norm_layer: Optional[Callable[..., nn.Module]] = None,
         beta: float = 0.5,
+        dropout_prob: float = 0.5,
+        weight_decay: float = 1e-4,
     ) -> None:
         super().__init__()
         if norm_layer is None:
             norm_layer = tdBatchNorm2d 
         self._norm_layer = norm_layer
         self.beta=beta
+        self.dropout_prob = dropout_prob
 
         self.inplanes = 64
         self.dilation = 1
         if replace_stride_with_dilation is None:
-            # each element in the tuple indicates if we should replace
-            # the 2x2 stride with a dilated convolution instead
             replace_stride_with_dilation = [False, False, False]
-        if len(replace_stride_with_dilation) != 3:
-            raise ValueError(
-                "replace_stride_with_dilation should be None "
-                f"or a 3-element tuple, got {replace_stride_with_dilation}"
-            )
         self.groups = groups
         self.base_width = width_per_group
         self.conv1 = nn.Conv2d(3, self.inplanes, kernel_size=7, stride=2, padding=3, bias=False)
@@ -185,6 +189,7 @@ class ResNet(nn.Module):
         self.layer4 = self._make_layer(block, 512, layers[3], stride=2, dilate=replace_stride_with_dilation[2])
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * block.expansion, num_classes)
+        self.dropout = nn.Dropout(p=self.dropout_prob)
         self.lif2 = Leaky(beta=beta, init_hidden=False)
 
         for m in self.modules():
@@ -194,17 +199,12 @@ class ResNet(nn.Module):
                 nn.init.constant_(m.weight, 1)
                 nn.init.constant_(m.bias, 0)
 
-        """
-        # Zero-initialize the last BN in each residual branch,
-        # so that the residual branch starts with zeros, and each residual block behaves like an identity.
-        # This improves the model by 0.2~0.3% according to https://arxiv.org/abs/1706.02677
         if zero_init_residual:
             for m in self.modules():
                 if isinstance(m, Bottleneck) and m.bn3.weight is not None:
-                    nn.init.constant_(m.bn3.weight, 0)  # type: ignore[arg-type]
+                    nn.init.constant_(m.bn3.weight, 0)
                 elif isinstance(m, BasicBlock) and m.bn2.weight is not None:
-                    nn.init.constant_(m.bn2.weight, 0)  # type: ignore[arg-type]
-        """
+                    nn.init.constant_(m.bn2.weight, 0)
 
     def _make_layer(
         self,
@@ -249,8 +249,6 @@ class ResNet(nn.Module):
         return nn.Sequential(*layers)
 
     def _forward_impl(self, x: Tensor) -> Tensor:
-        # See note [TorchScript super()]
-        # print(x.shape)
         x = self.conv1(x)
         x = self.bn1(x)
         x = self.maxpool(x)
@@ -263,6 +261,7 @@ class ResNet(nn.Module):
 
         x = self.avgpool(x)
         x = torch.flatten(x, 1)
+        x = self.dropout(x)  
         x = self.fc(x)
         spike_out, mem_out = self.lif2(x)
 
@@ -270,6 +269,7 @@ class ResNet(nn.Module):
 
     def forward(self, x: Tensor) -> Tensor:
         return self._forward_impl(x)
+
 
 def _resnet(
     block: Type[Union[BasicBlock, Bottleneck]],
