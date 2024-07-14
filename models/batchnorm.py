@@ -38,6 +38,7 @@ class tdBatchNorm2d(nn.BatchNorm2d):
 
         # calculate running estimates
         if self.training:
+            print(input.shape)
             mean = input.mean([0, 1, 3, 4])
             # use biased var in train
             var = input.var([0, 1, 3, 4], unbiased=False)
