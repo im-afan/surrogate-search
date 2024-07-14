@@ -143,12 +143,6 @@ class Bottleneck(nn.Module):
         return out
 
 
-import torch
-import torch.nn as nn
-from torch import Tensor
-from .batchnorm import tdBatchNorm2d
-from .resnet_blocks import BasicBlock, Bottleneck
-from snntorch import Leaky
 
 
 class ResNet(nn.Module):
