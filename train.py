@@ -57,7 +57,7 @@ def test(model: nn.Module, test_loader: DataLoader, timesteps: int = 10):
     batch_labels = batch_labels.to(device)
 
     batch_data = torch.movedim(batch_data, 1, 0) 
-    spikes_out, mem_out = forward_pass(model, timesteps, batch_data) 
+    spikes_out = forward_pass(model, timesteps, batch_data) 
     pred = spikes_out.sum(dim=0).argmax(1)
     total += len(batch_labels)
     correct += (pred == batch_labels).detach().cpu().sum().numpy()
@@ -211,7 +211,7 @@ def train(model: nn.Module,
                 dist_optim.step()
 
             prev_loss = model_loss.detach()
-            if(train_steps % 1 == 0):
+            if(train_steps % 50 == 0):
                 print(f'Loss: {model_loss.item()}, Normal params: {theta[0].item(), theta[1].item()}, temp: {temp.item()}')
             writer.add_scalar("Loss/train", model_loss.item(), train_steps)
             #print(f'Loss: {model_loss.item()}')
