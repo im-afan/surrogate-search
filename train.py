@@ -355,6 +355,7 @@ if __name__ == "__main__":
 
     to_spiking(model, num_steps=args.timesteps) 
     model = model.to(device)
+    print(model)
 
     if(args.training_type == "train"): 
         train(model, 
