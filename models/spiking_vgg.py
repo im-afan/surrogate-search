@@ -9,6 +9,12 @@ Original file is located at
 
 #Libraries
 
+# WARNING! this is no longer being used
+# WARNING! this is no longer being used
+# WARNING! this is no longer being used
+# WARNING! this is no longer being used
+# WARNING! this is no longer being used
+
 import torch
 import torch.nn as nn
 import snntorch as snn

@@ -1,5 +1,11 @@
 # modified from https://github.com/pytorch/vision/blob/main/torchvision/models/resnet.py
 
+# WARNING! this is no longer being used
+# WARNING! this is no longer being used
+# WARNING! this is no longer being used
+# WARNING! this is no longer being used
+# WARNING! this is no longer being used
+
 from functools import partial
 from typing import Any, Callable, List, Optional, Type, Union
 

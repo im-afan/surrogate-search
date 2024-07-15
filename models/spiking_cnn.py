@@ -1,3 +1,9 @@
+# WARNING! this is no longer being used
+# WARNING! this is no longer being used
+# WARNING! this is no longer being used
+# WARNING! this is no longer being used
+# WARNING! this is no longer being used
+
 import torch
 from torch import nn
 import snntorch as snn
