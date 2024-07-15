@@ -91,18 +91,24 @@ class DSpikeFunction(torch.autograd.Function):
         
         return grad_input, None, None
 
-def dspike(b=1.0):
+def dspike(b):
     c = 0.5
     def inner(mem):
         return DSpikeFunction.apply(mem, b, c)
     return inner
 
-def dspike1(b=1.0):
+def dspike1(b):
     b = torch.tensor(b)
     c = torch.tensor(0.5)
     def dspike_grad(input_, grad_input, spikes):
         a = 1 / (torch.tanh(b * (1 - c)) - torch.tanh(b * (-c)))
-        grad = a * b * (1 - torch.tanh(b * (input_ - torch.ones_like(input_)*c))**2) * grad_input
+        grad = np.clip(a * b * (1 - torch.tanh(b * (input_ - torch.ones_like(input_)*c))**2) * grad_input, 0, 1)
         
         return grad
     return dspike_grad
+
+
+
+
+
+
