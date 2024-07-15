@@ -1,1 +1,1 @@
-from . import to_spiking 
+from . import to_spiking, resnet

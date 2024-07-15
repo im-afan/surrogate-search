@@ -36,19 +36,6 @@ def set_surrogate(module: nn.Module, surrogate):
             setattr(child_module, "spike_grad", surrogate)
             #module.spike_grad = surrogate
 
-def forward_pass(net, num_steps, data):
-  #mem_rec = []
-  spk_rec = []
-  utils.reset(net)  # resets hidden states for all LIF neurons in net
-
-  for step in range(num_steps):
-      #spk_out, mem_out = net(data[step])
-      spk_out = net(data[step])
-      spk_rec.append(spk_out)
-      #mem_rec.append(mem_out)
-
-  return torch.stack(spk_rec)#, torch.stack(mem_rec)
-
 def test(model: nn.Module, test_loader: DataLoader, timesteps: int = 10):
     with torch.no_grad():
         total = 0
@@ -58,7 +45,7 @@ def test(model: nn.Module, test_loader: DataLoader, timesteps: int = 10):
             batch_labels = batch_labels.to(device)
 
             batch_data = torch.movedim(batch_data, 1, 0) 
-            spikes_out = forward_pass(model, timesteps, batch_data) 
+            spikes_out = model(batch_data) 
             pred = spikes_out.sum(dim=0).argmax(1)
             total += len(batch_labels)
             correct += (pred == batch_labels).detach().cpu().sum().numpy()
@@ -120,7 +107,7 @@ def train_categorical(
             # set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.dspike1(b=temp)))
             set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.tanh_surrogate1(width=temp)))
 
-            spk_out = forward_pass(model, timesteps, batch_data)
+            spk_out = model(batch_data)
             model_loss = torch.zeros(1, device=device, dtype=torch.float)
             for step in range(timesteps):
                 model_loss += loss(spk_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32),)
@@ -220,7 +207,7 @@ def train(model: nn.Module,
             set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.tanh_surrogate1(width=torch.abs(temp))))
 
             #spikes_out, mem_out = forward_pass(model, timesteps, batch_data) 
-            spikes_out = forward_pass(model, timesteps, batch_data) 
+            spikes_out = model(batch_data) 
             model_loss = torch.zeros(1, device=device, dtype=torch.float)
             for step in range(timesteps):
                 #print(spikes_out[step].dtype, F.one_hot(batch_labels, num_classes=num_classes).dtype)
@@ -343,7 +330,8 @@ if __name__ == "__main__":
     """
 
     if(args.arch == "resnet18"):
-        model = resnet18(num_classes=num_classes)
+        # model = resnet18(num_classes=num_classes)
+        model = models.resnet.resnet19_cifar(num_classes=num_classes)
         # model = models.spiking_resnet.resnet18(beta=args.beta, num_classes=num_classes)
         # model = models.spiking_cnn.SpikingCNN()
     if(args.arch == "vgg16"):
