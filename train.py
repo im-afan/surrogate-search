@@ -66,6 +66,7 @@ def train_categorical(
     temp_min: float = 1,
     temp_max: float = 25,
     n_candidates: int = 100, 
+    k_temp: float = 0.01,
 ):
     candidate_temps = torch.arange(start=temp_min, end=temp_max, step=(temp_max-temp_min)/n_candidates)
     logits = torch.ones(n_candidates, requires_grad=True, device=device, dtype=torch.float32)
@@ -121,7 +122,7 @@ def train_categorical(
 
             if(use_dynamic_surrogate):
                 dist_loss = (
-                    loss_change - k_entropy * dist.entropy().detach()
+                    loss_change - k_entropy * dist.entropy().detach() - k_temp * temp.detach()
                 ) * dist.log_prob(temp_idx)
                 dist_optim.zero_grad()
                 dist_loss.backward()
@@ -224,7 +225,7 @@ def train(model: nn.Module,
 
             loss_change = model_loss.detach() - prev_loss
             if(use_dynamic_surrogate):
-                dist_loss = (loss_change - k_entropy * dist.entropy().detach()) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
+                dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * temp.detach()) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
                 dist_optim.zero_grad()
                 dist_loss.backward()
                 #nn.utils.clip_grad_norm_([theta], 0.01)
