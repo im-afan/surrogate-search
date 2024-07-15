@@ -14,7 +14,7 @@ import numpy as np
 import snntorch as snn
 from snntorch.surrogate import FastSigmoid
 from snntorch import utils
-from models.to_spiking import to_spiking
+from models.to_spiking import SNN
 from surrogates import atan_surrogate, tanh_surrogate, dspike1, tanh_surrogate1
 import surrogates
 from data import snn_transforms
@@ -353,7 +353,7 @@ if __name__ == "__main__":
         model = models.spiking_cnn.SpikingCNN()
         # model = models.spiking_cnn_deep.SpikingCNNDeep()
 
-    to_spiking(model, num_steps=args.timesteps) 
+    model = SNN(model, num_steps=args.timesteps) 
     model = model.to(device)
     print(model)
 
