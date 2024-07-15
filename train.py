@@ -40,7 +40,8 @@ def forward_pass(net, num_steps, data):
   #mem_rec = []
   spk_rec = []
   utils.reset(net)  # resets hidden states for all LIF neurons in net
-
+  print(num_steps)
+  print(data.size(1))
   for step in range(num_steps):
       #spk_out, mem_out = net(data[step])
       spk_out = net(data[step])
@@ -70,7 +71,7 @@ def train_categorical(
     epochs: int = 3,
     k_entropy: float = 0.01,
     learning_rate: float = 0.01, 
-    timesteps: int = 10,
+    timesteps: int = 5,
     num_classes: int = 10,
     candidate_temps=[0.5, 1.0, 1.5, 2.0]
 ): 
@@ -91,8 +92,11 @@ def train_categorical(
       batch_data = batch_data.to(device)
       batch_labels = batch_labels.to(device)
 
-      batch_data = torch.movedim(batch_data, 1,0)
+      batch_data = torch.movedim(batch_data, 1, 0) 
       #print(batch_data.shape)
+
+      if batch_data.size(1) < timesteps: 
+        raise ValueError(f'Expected batch_data to have at least {timesteps} timesteps, but got {batch_data.size(1)}')
 
       #sample temperature from categorical distribution 
       probs = F.softmax(logits, dim=0)
@@ -104,10 +108,10 @@ def train_categorical(
       set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.dspike1(b=0.5)))
 
 
-      spikes_out, mem_out = forward_pass(model, timesteps, batch_data)
+      spikes_out = forward_pass(model, timesteps, batch_data)
       model_loss = torch.zeros(1, device=device, dtype=torch.float)
       for step in range(timesteps):
-          model_loss += loss(mem_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32))
+          model_loss += loss(spikes_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32))
       model_optim.zero_grad()
       model_loss.backward()
       model_optim.step()
@@ -331,9 +335,9 @@ if __name__ == "__main__":
         train_categorical(model, 
         train_loader=train_loader, 
         test_loader=test_loader,
-        epochs=3,
+        epochs=args.epochs,
         k_entropy=0,
         learning_rate= 1e-3,
-        timesteps=10,
+        timesteps=args.timesteps,
         candidate_temps=candidate_temps
     )
