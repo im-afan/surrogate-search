@@ -103,6 +103,5 @@ def dspike1(b=1.0):
     def dspike_grad(input_, grad_input, spikes):
         a = 1 / (torch.tanh(b * (1 - c)) - torch.tanh(b * (-c)))
         grad = a * b * (1 - torch.tanh(b * (input_ - torch.ones_like(input_)*c))**2) * grad_input
-        
         return grad
     return dspike_grad
