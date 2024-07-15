@@ -180,8 +180,9 @@ def train(model: nn.Module,
     writer = SummaryWriter()
     loss = nn.CrossEntropyLoss()
     
-    model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
-    model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
+    #model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
+    #model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
+    model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
     dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate)
     #dist_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(dist_optim, eta_min=0, T_max=epochs)
 
@@ -244,8 +245,8 @@ def train(model: nn.Module,
                 dist_optim.step()
 
             prev_loss = model_loss.detach()
-            if(train_steps % 50 == 0):
-                print(f'Loss: {model_loss.item()}, Normal params: {theta[0].item(), theta[1].item()}, temp: {temp.item()}')
+            #if(train_steps % 50 == 0):
+            print(f'Loss: {model_loss.item()}, Normal params: {theta[0].item(), theta[1].item()}, temp: {temp.item()}')
             writer.add_scalar("Loss/train", model_loss.item(), train_steps)
             #print(f'Loss: {model_loss.item()}')
         format_string = '%Y-%m-%d_%H:%M:%S'
@@ -256,7 +257,7 @@ def train(model: nn.Module,
             torch.save(model.state_dict(), "runs/saves/static_surrogate_" + cur_time + ".pt")
         acc = test(model, test_loader, timesteps=timesteps)
         writer.add_scalar("Accuracy/test", acc)
-        model_scheduler.step()
+        #model_scheduler.step()
         #dist_scheduler.step()
         print(f'Test accuracy after {epoch} epochs: {acc}')
         print(f'Average Loss: {total_loss / len(train_loader)}')
@@ -284,21 +285,27 @@ if __name__ == "__main__":
     parser.add_argument("--k_entropy", default=0.01, type=float)
 
     args = parser.parse_args()
-
-    CIFAR_MEAN = [0.49139968, 0.48215827, 0.44653124]
-    CIFAR_STD = [0.24703233, 0.24348505, 0.26158768]
-    transforms_list_train = [
-        transforms.RandomCrop(32, padding=4),
-        transforms.RandomHorizontalFlip(),
-        transforms.ToTensor(),
-        transforms.Normalize(CIFAR_MEAN, CIFAR_STD)
-        #transforms.RandomResizedCrop(size=(224, 224)),
-    ]
-
-    transforms_list_test = [
-        transforms.ToTensor(),
-        transforms.Normalize(CIFAR_MEAN, CIFAR_STD)
-    ]
+    
+    if(args.dataset == "CIFAR10" or args.dataset == "CIFAR100"):
+        CIFAR_MEAN = [0.49139968, 0.48215827, 0.44653124]
+        CIFAR_STD = [0.24703233, 0.24348505, 0.26158768]
+        transforms_list_train = [
+            transforms.RandomCrop(32, padding=4),
+            transforms.RandomHorizontalFlip(),
+            transforms.ToTensor(),
+            transforms.Normalize(CIFAR_MEAN, CIFAR_STD)
+            #transforms.RandomResizedCrop(size=(224, 224)),
+        ]
+        transforms_list_test = [
+            transforms.ToTensor(),
+            transforms.Normalize(CIFAR_MEAN, CIFAR_STD)
+        ]
+    else:
+        transforms_list_train = [
+            transforms.ToTensor(),
+            #transforms.RandomResizedCrop(size=(224, 224)),
+        ] 
+        transforms_list_test = [transforms.ToTensor()]
 
     if(args.encoding == "rate"):
         transforms_list_train.append(snn_transforms.RateCodeTransform(timesteps=args.timesteps))
@@ -320,8 +327,8 @@ if __name__ == "__main__":
         train_data = datasets.CIFAR100(root="data/datasets/cifar100", train=True, download=True, transform=transform_train) 
         test_data = datasets.CIFAR100(root="data/datasets/cifar100", train=False, download=True, transform=transform_test) 
     if(args.dataset == "MNIST"):
-        transforms_list_train.insert(-1, snn_transforms.ExpandChannelsTransform())
-        transforms_list_test.insert(-1, snn_transforms.ExpandChannelsTransform())
+        #transforms_list_train.insert(-1, snn_transforms.ExpandChannelsTransform())
+        #transforms_list_test.insert(-1, snn_transforms.ExpandChannelsTransform())
         transform_train = transforms.Compose(transforms_list_train)
         transform_test = transforms.Compose(transforms_list_test)
         num_classes = 10
@@ -343,14 +350,14 @@ if __name__ == "__main__":
     """
 
     if(args.arch == "resnet18"):
-        model = resnet18(num_classes=num_classes)
+        model = models.resnet.resnet19_cifar(num_classes=num_classes)
         # model = models.spiking_resnet.resnet18(beta=args.beta, num_classes=num_classes)
         # model = models.spiking_cnn.SpikingCNN()
     if(args.arch == "vgg16"):
         model = vgg16_bn(num_classes=num_classes)
         # model = models.spiking_vgg.vgg16_bn(beta=args.beta, num_classes=num_classes)
     if(args.arch == 'spikingcnn'):
-        model = models.spiking_cnn.SpikingCNN()
+        model = models.conv.SimpleCNN()
         # model = models.spiking_cnn_deep.SpikingCNNDeep()
 
     to_spiking(model, num_steps=args.timesteps) 
