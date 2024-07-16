@@ -123,6 +123,7 @@ def train_categorical(
             model_loss = torch.zeros(1, device=device, dtype=torch.float)
             for step in range(timesteps):
                 model_loss += loss(spk_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32),)
+            model_loss_detached = model_loss.detach()
             model_optim.zero_grad()
             model_loss.backward()
             model_optim.step()
@@ -227,6 +228,7 @@ def train(model: nn.Module,
                 #print(spikes_out.shape)
                 model_loss += loss(spikes_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32))
 
+            model_loss_detached = model_loss.detach()
             model_optim.zero_grad()
             model_loss.backward()
             #nn.utils.clip_grad_norm_(model.parameters(), 0.01)
@@ -237,7 +239,8 @@ def train(model: nn.Module,
 
             loss_change = model_loss.detach() - prev_loss
             if(use_dynamic_surrogate):
-                dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(temp.detach())) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
+                #dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(temp.detach())) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
+                dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(temp.detach())) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
                 dist_optim.zero_grad()
                 dist_loss.backward()
                 #nn.utils.clip_grad_norm_([theta], 0.01)
