@@ -81,9 +81,9 @@ def train_categorical(
     n_candidates: int = 100, 
 ):
     candidate_temps = torch.arange(start=temp_min, end=temp_max, step=(temp_max-temp_min)/n_candidates)
-    logits = torch.ones(n_candidates, requires_grad=True, device=device, dtype=torch.float32)
+    logits = torch.ones(n_candidates, requires_grad=True, dtype=torch.float32, device=device)
 
-    loss = nn.CrossEntropyLoss()
+    loss = nn.CrossEntropyLoss().to(device)
     model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
     model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
     dist_optim = torch.optim.SGD([logits], lr=dist_learning_rate)
@@ -99,7 +99,8 @@ def train_categorical(
         counter = 0
         total_loss = 0
         prev_loss = 0
-        prev_temp = torch.Tensor(temp_min)
+        prev_temp = torch.tensor(0, dtype=torch.int).to(device) 
+        #print(prev_temp, temp_min)
 
         for batch_data, batch_labels in train_loader:
             train_steps += 1
@@ -110,10 +111,11 @@ def train_categorical(
             # print(batch_data.shape)
 
             # sample temperature from categorical distribution
-            probs = F.softmax(logits, dim=0)
+            probs = F.softmax(logits, dim=0).to(device)
+            print(logits, probs)
             dist = Categorical(probs)
             temp_idx = dist.sample()
-            temp = torch.tensor(candidate_temps[temp_idx], device=device, dtype=torch.float32)
+            temp = candidate_temps[temp_idx]
             if(not use_dynamic_surrogate):
                 temp = torch.tensor(temp_min) 
 
@@ -134,6 +136,9 @@ def train_categorical(
 
             loss_change = model_loss.detach() - prev_loss
 
+            #print(probs)
+            print(prev_temp)
+            #print(dist.log_prob(prev_temp))
             if(use_dynamic_surrogate):
                 #dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(temp.detach())) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
                 dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp)) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
@@ -142,7 +147,7 @@ def train_categorical(
                 #nn.utils.clip_grad_norm_([theta], 0.01)
                 dist_optim.step()
 
-
+            prev_temp = temp_idx
 
             prev_loss = model_loss.detach()
             if(train_steps % 100 == 0): 
