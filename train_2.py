@@ -106,6 +106,7 @@ def train_spikingjelly(
 
             total_loss += model_loss.item()
 
+
             loss_change = model_loss.detach() - prev_loss
             if use_dynamic_surrogate:
                 dist_loss = (loss_change - k_entropy * dist.entropy().detach()) * dist.log_prob(temp)
@@ -132,7 +133,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="CIFAR10", type=str, choices=["CIFAR10", "CIFAR100", "MNIST"])
     parser.add_argument("--arch", default="resnet18", type=str, choices=["resnet18", "vgg16", "spikingcnn"])
-    parser.add_argument("--batch_size", default=128, type=int)
+    parser.add_argument("--batch_size", default=16, type=int)
     parser.add_argument("--model_learning_rate", default=1e-3, type=float)
     parser.add_argument("--dist_learning_rate", default=1e-3, type=float)
     parser.add_argument("--epochs", default=10, type=int)
@@ -198,6 +199,7 @@ if __name__ == "__main__":
     np.random.seed(args.seed)
 
     if args.training_type == "train_spikingjelly":
+        print(train_loader)
         train_spikingjelly(
             model=model,
             train_loader=train_loader,
@@ -207,7 +209,7 @@ if __name__ == "__main__":
             dist_learning_rate=args.dist_learning_rate,
             timesteps=args.timesteps,
             num_classes=num_classes,
-            use_dynamic_surrogate=args.use_dynamic_surrogate,
+            use_dynamic_surrogate=True,
             mean=args.initial_temp,
             logstd=args.initial_logstd
         )
