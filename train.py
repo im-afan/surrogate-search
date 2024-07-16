@@ -164,7 +164,7 @@ def train(model: nn.Module,
           train_loader: DataLoader, 
           test_loader: DataLoader,
           epochs: int = 3,
-          k_entropy: float = 0.1,
+          k_entropy: float = 0.01,
           k_temp: float = 0.01, # adding extra factor for closeness to real spike - good avoiding 
           model_learning_rate: float = 0.01, 
           dist_learning_rate: float = 0.001,
@@ -237,7 +237,7 @@ def train(model: nn.Module,
 
             loss_change = model_loss.detach() - prev_loss
             if(use_dynamic_surrogate):
-                dist_loss = (loss_change - k_entropy * dist.entropy().detach()) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
+                dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(temp.detach())) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
                 dist_optim.zero_grad()
                 dist_loss.backward()
                 #nn.utils.clip_grad_norm_([theta], 0.01)
@@ -282,6 +282,7 @@ if __name__ == "__main__":
     parser.add_argument("--temp_max", default=25, type=float)
     parser.add_argument("--n_candidates", default=25, type=float)
     parser.add_argument("--k_entropy", default=0.01, type=float)
+    parser.add_argument("--k_temp", default=0.01, type=float)
 
     args = parser.parse_args()
     
@@ -372,7 +373,8 @@ if __name__ == "__main__":
               train_loader=train_loader, 
               test_loader=test_loader,
               epochs=args.epochs,
-              k_entropy=0,
+              k_entropy=args.k_entropy,
+              k_temp=args.k_temp,
               model_learning_rate=args.model_learning_rate,
               dist_learning_rate=args.dist_learning_rate,
               timesteps=args.timesteps,
