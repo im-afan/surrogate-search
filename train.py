@@ -199,7 +199,7 @@ def train(model: nn.Module,
 
         total_loss = 0
         prev_loss = 0
-        prev_temp = -1000
+        prev_temp = torch.tensor(-1000)
             
         for batch_data, batch_labels in train_loader:
             train_steps += 1
@@ -248,7 +248,7 @@ def train(model: nn.Module,
                 dist_optim.step()
 
             prev_loss = model_loss.detach()
-            prev_temp = torch.clone(temp.detach())
+            prev_temp = temp.detach()
             if(train_steps % 100 == 0):
                 print(f'Loss: {model_loss.item()}, Normal params: {theta[0].item(), theta[1].item()}, temp: {temp.item()}')
             writer.add_scalar("Loss/train", model_loss.item(), train_steps)
