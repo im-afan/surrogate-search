@@ -199,7 +199,7 @@ def train(model: nn.Module,
 
         total_loss = 0
         prev_loss = 0
-        prev_temp = torch.tensor(-1000)
+        prev_temp = torch.tensor(1)
             
         for batch_data, batch_labels in train_loader:
             train_steps += 1
