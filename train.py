@@ -266,7 +266,7 @@ if __name__ == "__main__":
     if(args.encoding == "temporal"):
         transforms_list.append(snn_transforms.TemporalCodeTransform(timesteps=args.timesteps))
 
-    
+    print("hello")
 
     if(args.dataset == "CIFAR10"):
         transform = transforms.Compose(transforms_list)
