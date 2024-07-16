@@ -69,7 +69,8 @@ def train_categorical(
     train_loader: DataLoader,
     test_loader: DataLoader,
     epochs: int = 3,
-    k_entropy: float = 0.1,
+    k_entropy: float = 0.01,
+    k_temp: float = 0.01,
     model_learning_rate: float = 0.01,
     dist_learning_rate: float = 0.001,
     timesteps: int = 10,
@@ -98,6 +99,7 @@ def train_categorical(
         counter = 0
         total_loss = 0
         prev_loss = 0
+        prev_temp = torch.Tensor(temp_min)
 
         for batch_data, batch_labels in train_loader:
             train_steps += 1
@@ -113,7 +115,7 @@ def train_categorical(
             temp_idx = dist.sample()
             temp = torch.tensor(candidate_temps[temp_idx], device=device, dtype=torch.float32)
             if(not use_dynamic_surrogate):
-                temp = torch.tensor([temp_min]) 
+                temp = torch.tensor(temp_min) 
 
             # set_surrogate(model, snn.surrogate.custom_surrogate(dspike(b=torch.abs(temp))))
             # set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.dspike1(b=temp)))
@@ -122,7 +124,7 @@ def train_categorical(
             spk_out = forward_pass(model, timesteps, batch_data)
             model_loss = torch.zeros(1, device=device, dtype=torch.float)
             for step in range(timesteps):
-                model_loss += loss(spk_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32),)
+                model_loss += loss(spk_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32))
             model_loss_detached = model_loss.detach()
             model_optim.zero_grad()
             model_loss.backward()
@@ -133,15 +135,17 @@ def train_categorical(
             loss_change = model_loss.detach() - prev_loss
 
             if(use_dynamic_surrogate):
-                dist_loss = (
-                    loss_change - k_entropy * dist.entropy().detach()
-                ) * dist.log_prob(temp_idx)
+                #dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(temp.detach())) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
+                dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp)) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
                 dist_optim.zero_grad()
                 dist_loss.backward()
+                #nn.utils.clip_grad_norm_([theta], 0.01)
                 dist_optim.step()
 
+
+
             prev_loss = model_loss.detach()
-            if(train_steps % 50 == 0): 
+            if(train_steps % 100 == 0): 
                 print(f"Loss: {model_loss.item()}, Categorical params: {logits}, change loss: {loss_change}, entropy: {dist.entropy().detach()}")
 
         print(f"Average Loss: {total_loss / len(train_loader)}")
@@ -393,10 +397,12 @@ if __name__ == "__main__":
             model,
             train_loader=train_loader,
             test_loader=test_loader,
-            epochs=3,
-            k_entropy=0,
-            learning_rate=1e-3,
-            timesteps=10,
+            epochs=args.epochs,
+            k_entropy=args.k_entropy,
+            model_learning_rate=args.model_learning_rate,
+            dist_learning_rate=args.dist_learning_rate,
+            timesteps=args.timesteps,
+            use_dynamic_surrogate=args.use_dynamic_surrogate,
             temp_min=args.temp_min,
             temp_max=args.temp_max,
             n_candidates=args.n_candidates,
