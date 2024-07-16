@@ -248,7 +248,7 @@ def train(model: nn.Module,
                 dist_optim.step()
 
             prev_loss = model_loss.detach()
-            prev_temp = temp.detach()
+            prev_temp = torch.clone(temp.detach())
             if(train_steps % 100 == 0):
                 print(f'Loss: {model_loss.item()}, Normal params: {theta[0].item(), theta[1].item()}, temp: {temp.item()}')
             writer.add_scalar("Loss/train", model_loss.item(), train_steps)
