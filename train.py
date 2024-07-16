@@ -199,6 +199,7 @@ def train(model: nn.Module,
 
         total_loss = 0
         prev_loss = 0
+        prev_temp = -1000
             
         for batch_data, batch_labels in train_loader:
             train_steps += 1
@@ -240,13 +241,14 @@ def train(model: nn.Module,
             loss_change = model_loss.detach() - prev_loss
             if(use_dynamic_surrogate):
                 #dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(temp.detach())) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
-                dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(temp.detach())) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
+                dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp)) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
                 dist_optim.zero_grad()
                 dist_loss.backward()
                 #nn.utils.clip_grad_norm_([theta], 0.01)
                 dist_optim.step()
 
             prev_loss = model_loss.detach()
+            prev_temp = temp.detach()
             if(train_steps % 100 == 0):
                 print(f'Loss: {model_loss.item()}, Normal params: {theta[0].item(), theta[1].item()}, temp: {temp.item()}')
             writer.add_scalar("Loss/train", model_loss.item(), train_steps)
