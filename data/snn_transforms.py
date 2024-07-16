@@ -2,6 +2,7 @@ from typing import Callable
 import torchvision
 from torchvision.transforms import v2
 from snntorch import spikegen
+import torch
 
 class RateCodeTransform(Callable):
     def __init__(self,
@@ -31,6 +32,13 @@ class TemporalCodeTransform(Callable):
                                 threshold=self.threshold, 
                                 normalize=self.normalize, 
                                 linear=self.linear)
+
+class RepeatTransform(Callable):
+    def __init__(self, timesteps: int = 10):
+        self.timesteps = timesteps
+    
+    def __call__(self, img: torch.Tensor):
+        return img.repeat(self.timesteps, 1, 1, 1)
 
 class ExpandChannelsTransform(Callable):
     def __init__(self):

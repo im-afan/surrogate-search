@@ -40,7 +40,6 @@ def forward_pass(net, num_steps, data):
   #mem_rec = []
   spk_rec = []
   utils.reset(net)  # resets hidden states for all LIF neurons in net
-
   for step in range(num_steps):
       #spk_out, mem_out = net(data[step])
       spk_out = net(data[step])
@@ -268,13 +267,13 @@ if __name__ == "__main__":
     parser.add_argument("--dataset", default="CIFAR10", type=str, choices=["CIFAR10", "CIFAR100", "MNIST"])
     parser.add_argument("--arch", default="resnet18", type=str, choices=["resnet18", "vgg16", "spikingcnn"])
     parser.add_argument("--batch_size", default=128, type=int)
-    parser.add_argument("--model_learning_rate", default=1e-3, type=float)
+    parser.add_argument("--model_learning_rate", default=1e-2, type=float)
     parser.add_argument("--dist_learning_rate", default=1e-3, type=float)
     parser.add_argument("--epochs", default=10, type=int)
     parser.add_argument("--timesteps", default=5, type=int)
     parser.add_argument("--seed", default=0, type=int)
     parser.add_argument("--beta", default=0.5, type=float)
-    parser.add_argument("--encoding", default="rate", type=str, choices=["rate", "temporal"])
+    parser.add_argument("--encoding", default="repeat", type=str, choices=["repeat", "rate", "temporal"])
     parser.add_argument("--use_dynamic_surrogate", default=1, type=int)
     parser.add_argument("--initial_temp", default=1, type=float)
     parser.add_argument("--initial_logstd", default=-4, type=float)
@@ -313,6 +312,10 @@ if __name__ == "__main__":
     if(args.encoding == "temporal"):
         transforms_list_train.append(snn_transforms.TemporalCodeTransform(timesteps=args.timesteps))
         transforms_list_test.append(snn_transforms.TemporalCodeTransform(timesteps=args.timesteps))
+    if(args.encoding == "repeat"):
+        transforms_list_train.append(snn_transforms.RepeatTransform(timesteps=args.timesteps))
+        transforms_list_test.append(snn_transforms.RepeatTransform(timesteps=args.timesteps))
+
 
     if(args.dataset == "CIFAR10"):
         transform_train = transforms.Compose(transforms_list_train)
