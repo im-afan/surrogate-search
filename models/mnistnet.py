@@ -17,6 +17,7 @@ class MNISTNet(nn.Module):
         self.seq = nn.Sequential(
             nn.Flatten(),
             nn.Linear(784, 500),
+            nn.ReLU(),
             nn.Linear(500, 10)
         )
 
