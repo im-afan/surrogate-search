@@ -196,8 +196,8 @@ def train(model: nn.Module,
     writer = SummaryWriter()
     loss = nn.CrossEntropyLoss()
     
-    #model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
-    model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
+    model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
+    #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
     model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
     #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
     #dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate, momentum=0.9)
@@ -217,6 +217,7 @@ def train(model: nn.Module,
 
         total_loss = 0
         prev_loss = 0
+        prev_acc = 0
         prev_temp = torch.tensor(1)
             
         for batch_data, batch_labels in train_loader:
@@ -243,10 +244,17 @@ def train(model: nn.Module,
             #spikes_out = forward_pass(model, timesteps, batch_data) 
             spikes_out = model(batch_data)
             model_loss = torch.zeros(1, device=device, dtype=torch.float)
+            total, correct = 0, 0
             for step in range(timesteps):
                 #print(spikes_out[step].dtype, F.one_hot(batch_labels, num_classes=num_classes).dtype)
                 #print(spikes_out.shape)
                 model_loss += loss(spikes_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32))
+                pred = spikes_out.sum(dim=0).argmax(1)
+                with torch.no_grad():
+                    total += len(batch_labels)
+                    correct += (pred == batch_labels).detach().cpu().sum().numpy()
+
+            acc = correct/total
 
             model_loss_detached = model_loss.detach()
             model_optim.zero_grad()
@@ -258,8 +266,9 @@ def train(model: nn.Module,
 
 
             loss_change = model_loss_detached - prev_loss
+            acc_change = acc - prev_acc
             if(use_dynamic_surrogate):
-                dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp)) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
+                dist_loss = (-acc_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp)) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
                 #dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp)) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
                 dist_optim.zero_grad()
                 dist_loss.backward()
@@ -267,9 +276,10 @@ def train(model: nn.Module,
                 dist_optim.step()
 
             prev_loss = model_loss.detach()
+            prev_acc = acc
             prev_temp = temp.detach()
             if(train_steps % 100 == 0):
-                print(f'Loss: {model_loss.item()}, Normal params: {theta[0].item(), theta[1].item()}, temp: {temp.item()}')
+                print(f'Loss: {model_loss.item()}, Normal params: {theta[0].item(), theta[1].item()}, temp: {temp.item()}, acc{acc}')
             writer.add_scalar("Loss/train", model_loss.item(), train_steps)
             #print(f'Loss: {model_loss.item()}')
         format_string = '%Y-%m-%d_%H:%M:%S'
