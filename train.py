@@ -196,7 +196,8 @@ def train(model: nn.Module,
     writer = SummaryWriter()
     loss = nn.CrossEntropyLoss()
     
-    model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
+    #model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
+    model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
     model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
     #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
     #dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate, momentum=0.9)
@@ -267,7 +268,7 @@ def train(model: nn.Module,
 
             prev_loss = model_loss.detach()
             prev_temp = temp.detach()
-            if(train_steps % 1 == 0):
+            if(train_steps % 100 == 0):
                 print(f'Loss: {model_loss.item()}, Normal params: {theta[0].item(), theta[1].item()}, temp: {temp.item()}')
             writer.add_scalar("Loss/train", model_loss.item(), train_steps)
             #print(f'Loss: {model_loss.item()}')
