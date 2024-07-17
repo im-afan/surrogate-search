@@ -86,7 +86,7 @@ def train_categorical(
     loss = nn.CrossEntropyLoss().to(device)
     model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
     model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
-    dist_optim = torch.optim.SGD([logits], lr=dist_learning_rate)
+    dist_optim = torch.optim.SGD([logits], lr=dist_learning_rate, momentum=0.9)
 
     loss_hist = []
     test_loss_hist = []
@@ -111,9 +111,10 @@ def train_categorical(
             # print(batch_data.shape)
 
             # sample temperature from categorical distribution
-            probs = F.softmax(logits, dim=0).to(device)
-            print(logits, probs)
-            dist = Categorical(probs)
+            #probs = F.softmax(logits, dim=0).to(device)
+            #print(logits, probs)
+            print(logits)
+            dist = Categorical(logits=logits)
             temp_idx = dist.sample()
             temp = candidate_temps[temp_idx]
             if(not use_dynamic_surrogate):
@@ -137,15 +138,19 @@ def train_categorical(
             loss_change = model_loss.detach() - prev_loss
 
             #print(probs)
-            print(prev_temp)
+            #print(prev_temp)
             #print(dist.log_prob(prev_temp))
             if(use_dynamic_surrogate):
                 #dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(temp.detach())) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
-                dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp)) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
+                dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(candidate_temps[prev_temp])) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
+                #print(model_loss_detached, dist.entropy(), torch.log(prev_temp))
+                #print(dist_loss)
                 dist_optim.zero_grad()
                 dist_loss.backward()
                 #nn.utils.clip_grad_norm_([theta], 0.01)
                 dist_optim.step()
+
+                print("new logits", logits)
 
             prev_temp = temp_idx
 
@@ -192,7 +197,7 @@ def train(model: nn.Module,
     model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
     model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
     #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
-    dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate)
+    dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate, momentum=0.9)
     #dist_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(dist_optim, eta_min=0, T_max=epochs)
 
 
@@ -247,7 +252,7 @@ def train(model: nn.Module,
             total_loss += model_loss.item()
 
 
-            loss_change = model_loss.detach() - prev_loss
+            loss_change = model_loss_detached - prev_loss
             if(use_dynamic_surrogate):
                 #dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(temp.detach())) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
                 dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp)) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
