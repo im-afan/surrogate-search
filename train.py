@@ -289,7 +289,7 @@ def train(model: nn.Module,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="CIFAR10", type=str, choices=["CIFAR10", "CIFAR100", "MNIST"])
-    parser.add_argument("--arch", default="resnet18", type=str, choices=["resnet18", "vgg16", "spikingcnn", "vgg11"])
+    parser.add_argument("--arch", default="resnet18", type=str, choices=["resnet18", "vgg16", "spikingcnn", "vgg11", "mnistnet"])
     parser.add_argument("--batch_size", default=128, type=int)
     parser.add_argument("--model_learning_rate", default=1e-2, type=float)
     parser.add_argument("--dist_learning_rate", default=1e-3, type=float)
