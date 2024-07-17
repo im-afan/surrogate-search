@@ -389,6 +389,8 @@ if __name__ == "__main__":
     if(args.arch == 'spikingcnn'):
         model = models.conv.SimpleCNN()
         # model = models.spiking_cnn_deep.SpikingCNNDeep()
+    if(args.arch == 'mnistnet'):
+        model = models.mnistnet.MNISTNet()
 
     model = models.to_spiking.SNN(model)
     model = model.to(device)

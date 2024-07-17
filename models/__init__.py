@@ -1,1 +1,1 @@
-from . import spiking_resnet, spiking_vgg, spiking_cnn, spiking_cnn_deep, resnet, conv, vgg, vgg1, to_spiking
+from . import spiking_resnet, spiking_vgg, spiking_cnn, spiking_cnn_deep, resnet, conv, vgg, vgg1, to_spiking, mnistnet
