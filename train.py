@@ -14,7 +14,7 @@ import numpy as np
 import snntorch as snn
 from snntorch.surrogate import FastSigmoid
 from snntorch import utils
-from models.to_spiking import to_spiking
+#from models.to_spiking import to_spiking
 from surrogates import atan_surrogate, tanh_surrogate, dspike1, tanh_surrogate1
 import surrogates
 from data import snn_transforms
@@ -38,6 +38,7 @@ def set_surrogate(module: nn.Module, surrogate):
 
 def forward_pass(net, num_steps, data):
   #mem_rec = []
+  print("WARNING: this function is deprecated bad bad bad bad bad bad")
   spk_rec = []
   utils.reset(net)  # resets hidden states for all LIF neurons in net
   for step in range(num_steps):
@@ -57,7 +58,7 @@ def test(model: nn.Module, test_loader: DataLoader, timesteps: int = 10):
             batch_labels = batch_labels.to(device)
 
             batch_data = torch.movedim(batch_data, 1, 0) 
-            spikes_out = forward_pass(model, timesteps, batch_data) 
+            spikes_out = model(batch_data) 
             pred = spikes_out.sum(dim=0).argmax(1)
             total += len(batch_labels)
             correct += (pred == batch_labels).detach().cpu().sum().numpy()
@@ -125,7 +126,7 @@ def train_categorical(
             # set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.dspike1(b=temp)))
             set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.tanh_surrogate1(width=temp)))
 
-            spk_out = forward_pass(model, timesteps, batch_data)
+            spk_out = model.forward(batch_data) 
             model_loss = torch.zeros(1, device=device, dtype=torch.float)
             for step in range(timesteps):
                 model_loss += loss(spk_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32))
@@ -238,7 +239,8 @@ def train(model: nn.Module,
             set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.tanh_surrogate1(width=torch.abs(temp))))
 
             #spikes_out, mem_out = forward_pass(model, timesteps, batch_data) 
-            spikes_out = forward_pass(model, timesteps, batch_data) 
+            #spikes_out = forward_pass(model, timesteps, batch_data) 
+            spikes_out = model(batch_data)
             model_loss = torch.zeros(1, device=device, dtype=torch.float)
             for step in range(timesteps):
                 #print(spikes_out[step].dtype, F.one_hot(batch_labels, num_classes=num_classes).dtype)
@@ -265,7 +267,7 @@ def train(model: nn.Module,
 
             prev_loss = model_loss.detach()
             prev_temp = temp.detach()
-            if(train_steps % 100 == 0):
+            if(train_steps % 1 == 0):
                 print(f'Loss: {model_loss.item()}, Normal params: {theta[0].item(), theta[1].item()}, temp: {temp.item()}')
             writer.add_scalar("Loss/train", model_loss.item(), train_steps)
             #print(f'Loss: {model_loss.item()}')
@@ -387,7 +389,7 @@ if __name__ == "__main__":
         model = models.conv.SimpleCNN()
         # model = models.spiking_cnn_deep.SpikingCNNDeep()
 
-    to_spiking(model, num_steps=args.timesteps) 
+    model = models.to_spiking.SNN(model)
     model = model.to(device)
     print(model)
 
