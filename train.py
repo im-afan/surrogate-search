@@ -113,7 +113,7 @@ def train_categorical(
             # sample temperature from categorical distribution
             #probs = F.softmax(logits, dim=0).to(device)
             #print(logits, probs)
-            print(logits)
+            #print(logits)
             dist = Categorical(logits=logits)
             temp_idx = dist.sample()
             temp = candidate_temps[temp_idx]
@@ -150,7 +150,7 @@ def train_categorical(
                 #nn.utils.clip_grad_norm_([theta], 0.01)
                 dist_optim.step()
 
-                print("new logits", logits)
+                #print("new logits", logits)
 
             prev_temp = temp_idx
 
