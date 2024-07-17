@@ -189,19 +189,20 @@ def train(model: nn.Module,
           num_classes: int = 10, 
           use_dynamic_surrogate: bool = True,
           mean: float = 0.5,
-          logstd: float = -4):
+          logstd: float = -4,
+          update_dist_freq: int = 50):
 
     theta = torch.tensor([mean, logstd], requires_grad=True, device=device, dtype=torch.float32)
 
     writer = SummaryWriter()
     loss = nn.CrossEntropyLoss()
     
-    #model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
-    model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
+    model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
+    #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
     model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
     #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
-    #dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate, momentum=0.9)
-    dist_optim = torch.optim.Adam([theta], lr=dist_learning_rate)
+    dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate, momentum=0)
+    #dist_optim = torch.optim.Adam([theta], lr=dist_learning_rate)
     #dist_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(dist_optim, eta_min=0, T_max=epochs)
 
 
@@ -211,6 +212,7 @@ def train(model: nn.Module,
     #std = 0.1
 
     train_steps = 0
+    dist_loss = torch.zeros(1, dtype=torch.float32).to(device)
 
     for epoch in range(epochs):
         counter = 0
@@ -242,7 +244,7 @@ def train(model: nn.Module,
             #spikes_out, mem_out = forward_pass(model, timesteps, batch_data) 
             #spikes_out = forward_pass(model, timesteps, batch_data) 
             spikes_out = model(batch_data)
-            model_loss = torch.zeros(1, device=device, dtype=torch.float)
+            model_loss = torch.zeros(1, device=device, dtype=torch.float32)
             for step in range(timesteps):
                 #print(spikes_out[step].dtype, F.one_hot(batch_labels, num_classes=num_classes).dtype)
                 #print(spikes_out.shape)
@@ -258,13 +260,18 @@ def train(model: nn.Module,
 
 
             loss_change = model_loss_detached - prev_loss
+            #model_loss_detached = torch.ones(1, dtype=torch.float32)
             if(use_dynamic_surrogate):
-                dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp)) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
+                dist_loss += (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(torch.abs(prev_temp))) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
                 #dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp)) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
-                dist_optim.zero_grad()
-                dist_loss.backward()
-                #nn.utils.clip_grad_norm_([theta], 0.01)
-                dist_optim.step()
+                if(train_steps % update_dist_freq == 0):
+                    #print("update dist", train_steps, dist_loss)
+                    #dist_loss /= update_dist_freq
+                    dist_optim.zero_grad()
+                    dist_loss.backward()
+                    #nn.utils.clip_grad_norm_([theta], 0.01)
+                    dist_optim.step()
+                    dist_loss = torch.zeros(1, dtype=torch.float32).to(device)
 
             prev_loss = model_loss.detach()
             prev_temp = temp.detach()
@@ -307,6 +314,7 @@ if __name__ == "__main__":
     parser.add_argument("--n_candidates", default=25, type=float)
     parser.add_argument("--k_entropy", default=0.01, type=float)
     parser.add_argument("--k_temp", default=0.01, type=float)
+    parser.add_argument("--update_dist_freq", default=50, type=int)
 
     args = parser.parse_args()
     
@@ -408,7 +416,8 @@ if __name__ == "__main__":
               timesteps=args.timesteps,
               use_dynamic_surrogate=args.use_dynamic_surrogate,
               mean=args.initial_temp,
-              logstd=args.initial_logstd)
+              logstd=args.initial_logstd,
+              update_dist_freq=args.update_dist_freq)
 
     if(args.training_type == "train_categorical"): 
         candidate_temps = [5.0,10.0,15.0,25.0]
