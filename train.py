@@ -143,7 +143,7 @@ def train_categorical(
             #print(prev_temp)
             #print(dist.log_prob(prev_temp))
             if(use_dynamic_surrogate):
-                dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(temp.detach())) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
+                dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp.detach())) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
                 #dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(candidate_temps[prev_temp])) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
                 #print(model_loss_detached, dist.entropy(), torch.log(prev_temp))
                 #print(dist_loss)
@@ -258,7 +258,7 @@ def train(model: nn.Module,
 
             loss_change = model_loss_detached - prev_loss
             if(use_dynamic_surrogate):
-                dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(temp.detach())) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
+                dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp)) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
                 #dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp)) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
                 dist_optim.zero_grad()
                 dist_loss.backward()
