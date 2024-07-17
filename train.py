@@ -86,7 +86,8 @@ def train_categorical(
     loss = nn.CrossEntropyLoss().to(device)
     model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
     model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
-    dist_optim = torch.optim.SGD([logits], lr=dist_learning_rate, momentum=0.9)
+    #dist_optim = torch.optim.SGD([logits], lr=dist_learning_rate, momentum=0.9)
+    dist_optim = torch.optim.Adam([logits], lr=dist_learning_rate)
 
     loss_hist = []
     test_loss_hist = []
@@ -135,14 +136,14 @@ def train_categorical(
 
             total_loss += model_loss.item()
 
-            loss_change = model_loss.detach() - prev_loss
+            loss_change = model_loss_detached - prev_loss
 
             #print(probs)
             #print(prev_temp)
             #print(dist.log_prob(prev_temp))
             if(use_dynamic_surrogate):
-                #dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(temp.detach())) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
-                dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(candidate_temps[prev_temp])) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
+                dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(temp.detach())) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
+                #dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(candidate_temps[prev_temp])) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
                 #print(model_loss_detached, dist.entropy(), torch.log(prev_temp))
                 #print(dist_loss)
                 dist_optim.zero_grad()
@@ -197,7 +198,8 @@ def train(model: nn.Module,
     model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
     model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
     #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
-    dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate, momentum=0.9)
+    #dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate, momentum=0.9)
+    dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate)
     #dist_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(dist_optim, eta_min=0, T_max=epochs)
 
 
@@ -254,8 +256,8 @@ def train(model: nn.Module,
 
             loss_change = model_loss_detached - prev_loss
             if(use_dynamic_surrogate):
-                #dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(temp.detach())) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
-                dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp)) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
+                dist_loss = (loss_change - k_entropy * dist.entropy().detach() - k_temp * torch.log(temp.detach())) * dist.log_prob(temp) # max -dloss + entropy => min dloss - entropy
+                #dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp)) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
                 dist_optim.zero_grad()
                 dist_loss.backward()
                 #nn.utils.clip_grad_norm_([theta], 0.01)
@@ -284,7 +286,7 @@ def train(model: nn.Module,
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="CIFAR10", type=str, choices=["CIFAR10", "CIFAR100", "MNIST"])
-    parser.add_argument("--arch", default="resnet18", type=str, choices=["resnet18", "vgg16", "spikingcnn"])
+    parser.add_argument("--arch", default="resnet18", type=str, choices=["resnet18", "vgg16", "spikingcnn", "vgg11"])
     parser.add_argument("--batch_size", default=128, type=int)
     parser.add_argument("--model_learning_rate", default=1e-2, type=float)
     parser.add_argument("--dist_learning_rate", default=1e-3, type=float)
@@ -377,8 +379,10 @@ if __name__ == "__main__":
         # model = models.spiking_resnet.resnet18(beta=args.beta, num_classes=num_classes)
         # model = models.spiking_cnn.SpikingCNN()
     if(args.arch == "vgg16"):
-        model = vgg16_bn(num_classes=num_classes)
+        model = models.vgg.vgg16_bn(num_classes=num_classes)
         # model = models.spiking_vgg.vgg16_bn(beta=args.beta, num_classes=num_classes)
+    if(args.arch == "vgg11"):
+        model = models.vgg.vgg11_bn(num_classes=num_classes)
     if(args.arch == 'spikingcnn'):
         model = models.conv.SimpleCNN()
         # model = models.spiking_cnn_deep.SpikingCNNDeep()
