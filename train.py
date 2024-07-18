@@ -249,7 +249,7 @@ def train(model: nn.Module,
             #set_surrogate(model, snn.surrogate.fast_sigmoid(slope=25)) # todo: implement dspike
             #print(temp)
             #set_surrogate(model, surrogates.tanh_surrogate(width=0.5))
-            set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.tanh_surrogate1(width=torch.abs(temp))))
+            #set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.tanh_surrogate1(width=torch.abs(temp))))
 
             #spikes_out, mem_out = forward_pass(model, timesteps, batch_data) 
             #spikes_out = forward_pass(model, timesteps, batch_data) 
