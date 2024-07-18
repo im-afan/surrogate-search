@@ -27,14 +27,15 @@ from torchvision.models import resnet18, vgg16_bn
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def set_surrogate(module: nn.Module, surrogate):
+    #print("here")
     for name, child_module in module.named_children():
         #if(type(module) == snn.Leaky):
-        if(isinstance(child_module, nn.Sequential)):
-            set_surrogate(child_module, surrogate)
+        #print(child_module)
         if(isinstance(child_module, snn.Leaky)):
             #print("replace lol")
             setattr(child_module, "spike_grad", surrogate)
             #module.spike_grad = surrogate
+        set_surrogate(child_module, surrogate)
 
 def forward_pass(net, num_steps, data):
   #mem_rec = []
@@ -54,6 +55,94 @@ def schedule_std(epoch, max_epochs, std0=0.1, std1=1e-6):
 
 def schedule_width(epoch, max_epochs, min_k=1, max_k=10):
     return ((10**(epoch/max_epochs)-1)*max_k + (10 - 10**(epoch/max_epochs))*min_k)/9
+
+def adjust_temperature_with_fdg(model, theta, dist_optim, data, target, epsilon=0.1, delta=0.2):
+    model.zero_grad()
+    # first compute FDG
+    first_layer = None
+    for m in model.modules():
+        print(m)
+        if(isinstance(m, nn.Conv2d)):
+            first_layer = m
+            break
+
+    weight = first_layer.weight.data
+    print(weight.shape)
+    data = data.reshape((data.shape[0], 1, data.shape[1], data.shape[2], data.shape[3]))
+    target = target.reshape((1, target.shape[0]))
+    #target = target.repeat(5, 1, 1)
+    print("SHAPES:", data.shape, target.shape)
+
+    fdg = torch.zeros_like(weight)
+    aa, bb, cc, dd = weight.shape
+    j = 0
+    with torch.no_grad():
+        for a in range(aa):
+            for b in range(bb):
+                for c in range(cc):
+                    for d in range(dd):
+                        j += 1
+                        #if(j > 10):
+                        #    continue
+                        if not hasattr(model, 'conv1'):
+                            #print("here")
+                            weight[a, b, c, d] += epsilon
+                            output = model(data)
+                            loss_p = torch.zeros(1, dtype=torch.float32) 
+                            for i in range(5):
+                                loss_p += F.cross_entropy(output[i], target)
+                            weight[a, b, c, d] -= 2 * epsilon
+                            output = model(data)
+                            loss_n = torch.zeros(1, dtype=torch.float32)
+                            for i in range(5):
+                                loss_n += F.cross_entropy(output[i], target)
+                            fdg[a, b, c, d] = (loss_p - loss_n) / (2 * epsilon)
+                            print(weight[a, b, c, d])
+                            weight[a, b, c, d] += epsilon
+                            #print(output, target)
+                            print(loss_p, loss_n, weight[a, b, c, d])
+                            print("change fdg!", (loss_p - loss_n) / (2*epsilon))
+
+    cur_temp = theta[0] 
+    cosine_sim = 0
+    tag = 0
+
+    dist = Normal(theta[0], torch.exp(theta[1]))
+    dist_loss = torch.zeros(1, dtype=torch.float32).to(device)
+    for i in range(100):
+        """if i == 0:
+            pass
+        elif i == 1:
+            if cur_temp - delta <= 0.:
+                continue
+            adjust_temperature(model, -delta)
+        else:
+            adjust_temperature(model, delta)"""
+        sampled_temp = dist.sample()
+        set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.tanh_surrogate1(width=sampled_temp)))
+        model.zero_grad()
+        output = model(data)
+        loss = torch.zeros(1, dtype=torch.float32) 
+        for i in range(5):
+            loss += F.cross_entropy(output[i], target)
+
+        #print(loss)
+        loss.backward()
+        #model.sync_gradients()
+        cur_grad = first_layer.weight.grad.data
+        cur_cosine_sim = nn.CosineSimilarity(dim=0, eps=1e-6)(cur_grad.flatten(), fdg.flatten())
+        print(loss, sampled_temp, torch.sum(first_layer.weight.grad.data), cur_cosine_sim, cur_grad.flatten().norm(), fdg.flatten().norm())
+        dist_loss += -cur_cosine_sim * dist.log_prob(sampled_temp)
+
+    dist_optim.zero_grad()
+    dist_loss.backward()
+    dist_optim.step() 
+
+    set_surrogate(model, surrogates.tanh_surrogate1(width=theta[0])) 
+
+    new_temp = theta[0] 
+    print('Temperature adjusted to: {}'.format(new_temp))
+    return new_temp
 
 def test(model: nn.Module, test_loader: DataLoader, timesteps: int = 10):
     with torch.no_grad():
@@ -302,6 +391,111 @@ def train(model: nn.Module,
         print(f'Average Loss: {total_loss / len(train_loader)}')
     writer.flush()
 
+def train_fdg(model: nn.Module, 
+          train_loader: DataLoader, 
+          test_loader: DataLoader,
+          epochs: int = 3,
+          k_entropy: float = 0.01,
+          k_temp: float = 0.01, # adding extra factor for closeness to real spike - good avoiding 
+          model_learning_rate: float = 0.01, 
+          dist_learning_rate: float = 0.001,
+          timesteps: int = 10,
+          num_classes: int = 10, 
+          use_dynamic_surrogate: bool = True,
+          mean: float = 0.5,
+          logstd: float = -4,
+          update_dist_freq: int = 50):
+
+    theta = torch.tensor([mean, logstd], requires_grad=True, device=device, dtype=torch.float32)
+
+    writer = SummaryWriter()
+    loss = nn.CrossEntropyLoss()
+    
+    model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
+    #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
+    model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
+    #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
+    #dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate, momentum=0)
+    dist_optim = torch.optim.Adam([theta], lr=dist_learning_rate)
+    #dist_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(dist_optim, eta_min=0, T_max=epochs)
+
+
+    loss_hist = []
+    test_loss_hist = []
+    #eps = 1-1e-4
+    #std = 0.1
+
+    train_steps = 0
+    dist_loss = torch.zeros(1, dtype=torch.float32).to(device)
+
+    for epoch in range(epochs):
+        counter = 0
+
+        total_loss = 0
+        prev_loss = 0
+        prev_temp = torch.tensor(1)
+        #temp = schedule_width(epoch, epochs)
+        #std = schedule_std(epoch, epochs)
+        #print(std)
+            
+        for i, (batch_data, batch_labels) in enumerate(train_loader):
+            train_steps += 1
+
+            batch_data = batch_data.to(device)
+            batch_labels = batch_labels.to(device)
+
+
+            if(i == 0):
+                adjust_temperature_with_fdg(model=model, theta=theta, dist_optim=dist_optim, data=batch_data[0], target=F.one_hot(batch_labels, num_classes=num_classes)[0].to(torch.float32))
+
+            #print(batch_data)
+            #print(model(batch_data))
+            batch_data = torch.movedim(batch_data, 1, 0) 
+            dist = Normal(theta[0], torch.exp(theta[1]))
+            #std *= eps
+            temp = dist.sample()
+            if(not use_dynamic_surrogate):
+                temp = torch.tensor(mean)
+            #set_surrogate(model, surrogates.atan_surrogate(width=0.5)) # todo: implement dspike
+            #set_surrogate(model, snn.surrogate.fast_sigmoid(slope=25)) # todo: implement dspike
+            #print(temp)
+            #set_surrogate(model, surrogates.tanh_surrogate(width=0.5))
+            set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.tanh_surrogate1(width=torch.abs(temp))))
+
+            #spikes_out, mem_out = forward_pass(model, timesteps, batch_data) 
+            #spikes_out = forward_pass(model, timesteps, batch_data) 
+            spikes_out = model(batch_data)
+            model_loss = torch.zeros(1, device=device, dtype=torch.float32)
+            for step in range(timesteps):
+                #print(spikes_out[step].dtype, F.one_hot(batch_labels, num_classes=num_classes).dtype)
+                #print(spikes_out.shape)
+                model_loss += loss(spikes_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32))
+
+            model_loss_detached = model_loss.detach()
+            model_optim.zero_grad()
+            model_loss.backward()
+            #nn.utils.clip_grad_norm_(model.parameters(), 0.01)
+            model_optim.step()
+
+            if(train_steps % 100 == 0):
+                print(f'Loss: {model_loss.item()}, Normal params: {theta[0].item(), theta[1].item()}, temp: {temp.item()}')
+            writer.add_scalar("Loss/train", model_loss.item(), train_steps)
+            #print(f'Loss: {model_loss.item()}')
+        format_string = '%Y-%m-%d_%H:%M:%S'
+        cur_time = time.strftime(format_string, time.gmtime())
+        if(use_dynamic_surrogate):
+            torch.save(model.state_dict(), "runs/saves/dynamic_surrogate_" + cur_time + ".pt")
+        else:
+            torch.save(model.state_dict(), "runs/saves/static_surrogate_" + cur_time + ".pt")
+        acc = test(model, test_loader, timesteps=timesteps)
+        writer.add_scalar("Accuracy/test", acc)
+        model_scheduler.step()
+        #dist_scheduler.step()
+        print(f'Test accuracy after {epoch} epochs: {acc}')
+        print(f'Average Loss: {total_loss / len(train_loader)}')
+    writer.flush()
+
+
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--dataset", default="CIFAR10", type=str, choices=["CIFAR10", "CIFAR100", "MNIST"])
@@ -317,7 +511,7 @@ if __name__ == "__main__":
     parser.add_argument("--use_dynamic_surrogate", default=1, type=int)
     parser.add_argument("--initial_temp", default=1, type=float)
     parser.add_argument("--initial_logstd", default=-4, type=float)
-    parser.add_argument("--training_type", default="train", type=str, choices=["train","train_categorical"])
+    parser.add_argument("--training_type", default="train", type=str, choices=["train","train_categorical","train_fdg"])
     parser.add_argument("--temp_min", default=1, type=float)
     parser.add_argument("--temp_max", default=25, type=float)
     parser.add_argument("--n_candidates", default=25, type=float)
@@ -427,7 +621,20 @@ if __name__ == "__main__":
               mean=args.initial_temp,
               logstd=args.initial_logstd,
               update_dist_freq=args.update_dist_freq)
-
+    if(args.training_type == "train_fdg"): 
+        train_fdg(model, 
+              train_loader=train_loader, 
+              test_loader=test_loader,
+              epochs=args.epochs,
+              k_entropy=args.k_entropy,
+              k_temp=args.k_temp,
+              model_learning_rate=args.model_learning_rate,
+              dist_learning_rate=args.dist_learning_rate,
+              timesteps=args.timesteps,
+              use_dynamic_surrogate=args.use_dynamic_surrogate,
+              mean=args.initial_temp,
+              logstd=args.initial_logstd,
+              update_dist_freq=args.update_dist_freq)
     if(args.training_type == "train_categorical"): 
         candidate_temps = [5.0,10.0,15.0,25.0]
         train_categorical(
