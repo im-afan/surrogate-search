@@ -49,6 +49,12 @@ def forward_pass(net, num_steps, data):
 
   return torch.stack(spk_rec)#, torch.stack(mem_rec)
 
+def schedule_std(epoch, max_epochs, std0=0.1, std1=1e-6):
+    return ((10**(epoch/max_epochs)-1)*std1 + (10 - 10**(epoch/max_epochs))*std0)/9
+
+def schedule_width(epoch, max_epochs, min_k=1, max_k=10):
+    return ((10**(epoch/max_epochs)-1)*max_k + (10 - 10**(epoch/max_epochs))*min_k)/9
+
 def test(model: nn.Module, test_loader: DataLoader, timesteps: int = 10):
     with torch.no_grad():
         total = 0
@@ -201,8 +207,8 @@ def train(model: nn.Module,
     #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
     model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
     #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
-    dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate, momentum=0)
-    #dist_optim = torch.optim.Adam([theta], lr=dist_learning_rate)
+    #dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate, momentum=0)
+    dist_optim = torch.optim.Adam([theta], lr=dist_learning_rate)
     #dist_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(dist_optim, eta_min=0, T_max=epochs)
 
 
@@ -220,6 +226,9 @@ def train(model: nn.Module,
         total_loss = 0
         prev_loss = 0
         prev_temp = torch.tensor(1)
+        #temp = schedule_width(epoch, epochs)
+        #std = schedule_std(epoch, epochs)
+        #print(std)
             
         for batch_data, batch_labels in train_loader:
             train_steps += 1
