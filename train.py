@@ -27,14 +27,15 @@ from torchvision.models import resnet18, vgg16_bn
 device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
 
 def set_surrogate(module: nn.Module, surrogate):
+    #print("here")
     for name, child_module in module.named_children():
         #if(type(module) == snn.Leaky):
-        if(isinstance(child_module, nn.Sequential)):
-            set_surrogate(child_module, surrogate)
+        #print(child_module)
         if(isinstance(child_module, snn.Leaky)):
             #print("replace lol")
             setattr(child_module, "spike_grad", surrogate)
             #module.spike_grad = surrogate
+        set_surrogate(child_module, surrogate)
 
 def forward_pass(net, num_steps, data):
   #mem_rec = []
