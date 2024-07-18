@@ -204,8 +204,8 @@ def train(model: nn.Module,
     writer = SummaryWriter()
     loss = nn.CrossEntropyLoss()
     
-    model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
-    #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
+    #model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
+    model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
     model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
     #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
     #dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate, momentum=0)
@@ -249,7 +249,7 @@ def train(model: nn.Module,
             #set_surrogate(model, snn.surrogate.fast_sigmoid(slope=25)) # todo: implement dspike
             #print(temp)
             #set_surrogate(model, surrogates.tanh_surrogate(width=0.5))
-            #set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.tanh_surrogate1(width=torch.abs(temp))))
+            set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.tanh_surrogate1(width=torch.abs(temp))))
 
             #spikes_out, mem_out = forward_pass(model, timesteps, batch_data) 
             #spikes_out = forward_pass(model, timesteps, batch_data) 
