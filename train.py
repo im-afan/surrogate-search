@@ -208,8 +208,8 @@ def train(model: nn.Module,
     model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
     model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
     #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
-    #dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate, momentum=0)
-    dist_optim = torch.optim.Adam([theta], lr=dist_learning_rate)
+    dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate, momentum=0)
+    #dist_optim = torch.optim.Adam([theta], lr=dist_learning_rate)
     #dist_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(dist_optim, eta_min=0, T_max=epochs)
 
 
