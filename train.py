@@ -93,7 +93,7 @@ def train_categorical(
 
     loss = nn.CrossEntropyLoss().to(device)
     model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
-    model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
+    #model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
     #dist_optim = torch.optim.SGD([logits], lr=dist_learning_rate, momentum=0.9)
     dist_optim = torch.optim.Adam([logits], lr=dist_learning_rate)
 
@@ -206,7 +206,7 @@ def train(model: nn.Module,
     
     #model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
     model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
-    model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
+    #model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
     #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
     #dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate, momentum=0)
     dist_optim = torch.optim.Adam([theta], lr=dist_learning_rate)
@@ -221,17 +221,20 @@ def train(model: nn.Module,
     train_steps = 0
     dist_loss = torch.zeros(1, dtype=torch.float32).to(device)
 
+    random_per_epoch = 100
+
     for epoch in range(epochs):
         counter = 0
 
         total_loss = 0
         prev_loss = 0
+        prev_acc = 0
         prev_temp = torch.tensor(1)
         #temp = schedule_width(epoch, epochs)
         #std = schedule_std(epoch, epochs)
         #print(std)
             
-        for batch_data, batch_labels in train_loader:
+        for i, (batch_data, batch_labels) in enumerate(train_loader):
             train_steps += 1
 
             batch_data = batch_data.to(device)
@@ -242,9 +245,12 @@ def train(model: nn.Module,
             #print(model(batch_data))
             dist = Normal(theta[0], torch.exp(theta[1]))
             #std *= eps
-            temp = dist.sample()
-            if(not use_dynamic_surrogate):
-                temp = torch.tensor(mean)
+            if(i <= random_per_epoch):
+                temp = dist.sample()
+                if(not use_dynamic_surrogate):
+                    temp = torch.tensor(mean)
+            else:
+                temp = torch.tensor(theta[0])
             #set_surrogate(model, surrogates.atan_surrogate(width=0.5)) # todo: implement dspike
             #set_surrogate(model, snn.surrogate.fast_sigmoid(slope=25)) # todo: implement dspike
             #print(temp)
@@ -255,10 +261,17 @@ def train(model: nn.Module,
             #spikes_out = forward_pass(model, timesteps, batch_data) 
             spikes_out = model(batch_data)
             model_loss = torch.zeros(1, device=device, dtype=torch.float32)
+            total, correct = 0, 0
             for step in range(timesteps):
                 #print(spikes_out[step].dtype, F.one_hot(batch_labels, num_classes=num_classes).dtype)
                 #print(spikes_out.shape)
                 model_loss += loss(spikes_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32))
+                pred = spikes_out.sum(dim=0).argmax(1)
+                total += len(batch_labels)
+                correct += (pred == batch_labels).detach().cpu().sum().numpy()
+
+            acc = total / correct
+                
 
             model_loss_detached = model_loss.detach()
             model_optim.zero_grad()
@@ -272,9 +285,10 @@ def train(model: nn.Module,
             loss_change = model_loss_detached - prev_loss
             #model_loss_detached = torch.ones(1, dtype=torch.float32)
             if(use_dynamic_surrogate):
-                dist_loss += (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(torch.abs(prev_temp))) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
+                #dist_loss += (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(torch.abs(prev_temp))) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
+                dist_loss += (acc - k_entropy * dist.entropy().detach() - k_temp * torch.log(torch.abs(prev_temp))) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
                 #dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp)) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
-                if(train_steps % update_dist_freq == 0):
+                if(i % update_dist_freq == 0 and i <= random_per_epoch):
                     #print("update dist", train_steps, dist_loss)
                     #dist_loss /= update_dist_freq
                     dist_optim.zero_grad()
@@ -283,6 +297,7 @@ def train(model: nn.Module,
                     dist_optim.step()
                     dist_loss = torch.zeros(1, dtype=torch.float32).to(device)
 
+            prev_acc = acc
             prev_loss = model_loss.detach()
             prev_temp = temp.detach()
             if(train_steps % 100 == 0):
@@ -297,7 +312,7 @@ def train(model: nn.Module,
             torch.save(model.state_dict(), "runs/saves/static_surrogate_" + cur_time + ".pt")
         acc = test(model, test_loader, timesteps=timesteps)
         writer.add_scalar("Accuracy/test", acc)
-        model_scheduler.step()
+        #model_scheduler.step()
         #dist_scheduler.step()
         print(f'Test accuracy after {epoch} epochs: {acc}')
         print(f'Average Loss: {total_loss / len(train_loader)}')
