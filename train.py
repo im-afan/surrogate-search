@@ -286,7 +286,7 @@ def train(model: nn.Module,
             #model_loss_detached = torch.ones(1, dtype=torch.float32)
             if(use_dynamic_surrogate):
                 #dist_loss += (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(torch.abs(prev_temp))) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
-                dist_loss += (acc - k_entropy * dist.entropy().detach() - k_temp * torch.log(torch.abs(prev_temp))) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
+                dist_loss += (-acc - k_entropy * dist.entropy().detach() - k_temp * torch.log(torch.abs(prev_temp))) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
                 #dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp)) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
                 if(i % update_dist_freq == 0 and i <= random_per_epoch):
                     #print("update dist", train_steps, dist_loss)
