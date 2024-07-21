@@ -93,7 +93,7 @@ def train_categorical(
 
     loss = nn.CrossEntropyLoss().to(device)
     model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
-    model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
+    #model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
     #dist_optim = torch.optim.SGD([logits], lr=dist_learning_rate, momentum=0.9)
     dist_optim = torch.optim.Adam([logits], lr=dist_learning_rate)
 
@@ -176,7 +176,7 @@ def train_categorical(
             torch.save(model.state_dict(), "runs/saves/static_surrogate_" + cur_time + ".pt")
         acc = test(model, test_loader, timesteps=timesteps)
         writer.add_scalar("Accuracy/test", acc)
-        model_scheduler.step()
+        #model_scheduler.step()
         #dist_scheduler.step()
         print(f'Test accuracy after {epoch} epochs: {acc}')
         print(f'Average Loss: {total_loss / len(train_loader)}')
@@ -210,7 +210,7 @@ def train(model: nn.Module,
     #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
     #dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate, momentum=0)
     #dist_optim = torch.optim.Adam([theta], lr=dist_learning_rate)
-    dist_optim = torch.optim.Adam([theta], betas=(0, 0), lr=dist_learning_rate)
+    dist_optim = torch.optim.Adam([theta], betas=(0.8, 0.888), lr=dist_learning_rate)
     #dist_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(dist_optim, eta_min=0, T_max=epochs)
 
 
