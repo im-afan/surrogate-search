@@ -298,7 +298,7 @@ def train(model: nn.Module,
             torch.save(model.state_dict(), "runs/saves/static_surrogate_" + cur_time + ".pt")
         acc = test(model, test_loader, timesteps=timesteps)
         writer.add_scalar("Accuracy/test", acc)
-        model_scheduler.step()
+        #model_scheduler.step()
         #dist_scheduler.step()
         print(f'Test accuracy after {epoch} epochs: {acc}')
         print(f'Average Loss: {total_loss / len(train_loader)}')
