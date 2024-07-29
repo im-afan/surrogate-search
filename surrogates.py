@@ -90,6 +90,7 @@ class DSpikeFunction(torch.autograd.Function):
         grad_input = a * b * (1 - torch.tanh(b * (mem - c))**2) * grad_output
         
         return grad_input, None, None
+        
 
 def dspike(b=1.0):
     c = 0.5
