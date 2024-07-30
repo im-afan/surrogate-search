@@ -91,15 +91,15 @@ def train(model: nn.Module,
     writer = SummaryWriter()
     loss = nn.CrossEntropyLoss()
     
-    model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
-    #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
-    model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
+    #model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
+    model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
+    #model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
     #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
     #dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate, momentum=0)
     #dist_optim = torch.optim.Adam([theta], lr=dist_learning_rate)
-    #dist_optim = torch.optim.Adam([theta], betas=(0.9**10, 0.999**10), lr=dist_learning_rate)
+    dist_optim = torch.optim.Adam([theta], betas=(0.9**10, 0.999**10), lr=dist_learning_rate)
     #dist_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(dist_optim, eta_min=0, T_max=epochs)
-    dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate)
+    #dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate)
 
 
     loss_hist = []
@@ -126,6 +126,7 @@ def train(model: nn.Module,
             batch_data = batch_data.to(device)
             batch_labels = batch_labels.to(device)
             batch_data = torch.movedim(batch_data, 1, 0) 
+            batch_labels = F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32)
             
             temp = theta[0] 
             if(not use_dynamic_surrogate):
@@ -135,7 +136,7 @@ def train(model: nn.Module,
             spikes_out = model(batch_data)
             model_loss = torch.zeros(1, device=device, dtype=torch.float32)
             for step in range(timesteps):
-                model_loss += loss(spikes_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32))
+                model_loss += loss(spikes_out[step], batch_labels)
 
             model_loss_detached = model_loss.detach()
             model_optim.zero_grad()
@@ -148,17 +149,6 @@ def train(model: nn.Module,
             loss_change = model_loss_detached - prev_loss
             #model_loss_detached = torch.ones(1, dtype=torch.float32)
             if(use_dynamic_surrogate):
-                def calc_loss(b):
-                    batch_data = torch.movedim(batch_data, 1, 0) 
-                    set_surrogate(model, snn.surrogate.custom_surrogate(surrogates.tanh_surrogate1(width=b)))
-                    spikes_out = model(batch_data)
-                    model_loss = torch.zeros(1, device=device, dtype=torch.float32)
-                    for step in range(timesteps):
-                        #print(spikes_out[step].dtype, F.one_hot(batch_labels, num_classes=num_classes).dtype)
-                        #print(spikes_out.shape)
-                        model_loss += loss(spikes_out[step], F.one_hot(batch_labels, num_classes=num_classes).to(dtype=torch.float32))
-                    return model_loss
-
                 dist = Normal(theta[0], torch.exp(theta[1])) 
                 dist_loss = torch.zeros(1, device=device, dtype=torch.float32)
                 if(train_steps % update_dist_freq == 0):
@@ -167,12 +157,20 @@ def train(model: nn.Module,
 
                         model_state = model.state_dict()
 
-                        model_loss = calc_loss(temp)                    
+                        spikes_out = model(batch_data)
+                        model_loss = torch.zeros(1, device=device, dtype=torch.float32)
+                        for step in range(timesteps):
+                            model_loss += loss(spikes_out[step], batch_labels)
+
                         model_optim.zero_grad()
                         model_loss.backward()
                         model_optim.step()
 
-                        model_loss1 = calc_loss(temp)
+                        spikes_out = model(batch_data)
+                        model_loss1 = torch.zeros(1, device=device, dtype=torch.float32)
+                        for step in range(timesteps):
+                            model_loss1 += loss(spikes_out[step], batch_labels)
+
                         dist_loss += model_loss1.detach() * dist.log_prob(temp)
 
                         model.load_state_dict(model_state)
@@ -196,7 +194,7 @@ def train(model: nn.Module,
             torch.save(model.state_dict(), "runs/saves/static_surrogate_" + cur_time + ".pt")
         acc = test(model, test_loader, timesteps=timesteps)
         writer.add_scalar("Accuracy/test", acc)
-        model_scheduler.step()
+        #model_scheduler.step()
         #dist_scheduler.step()
         print(f'Test accuracy after {epoch} epochs: {acc}')
         print(f'Average Loss: {total_loss / len(train_loader)}')
@@ -208,7 +206,7 @@ if __name__ == "__main__":
     parser.add_argument("--arch", default="resnet18", type=str, choices=["resnet18", "vgg16", "spikingcnn", "vgg11", "mnistnet"])
     parser.add_argument("--batch_size", default=128, type=int)
     parser.add_argument("--model_learning_rate", default=1e-2, type=float)
-    parser.add_argument("--dist_learning_rate", default=1e-3, type=float)
+    parser.add_argument("--dist_learning_rate", default=1e-2, type=float)
     parser.add_argument("--epochs", default=10, type=int)
     parser.add_argument("--timesteps", default=5, type=int)
     parser.add_argument("--seed", default=0, type=int)
