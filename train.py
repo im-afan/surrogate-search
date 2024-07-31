@@ -206,7 +206,7 @@ def train(model: nn.Module,
     
     #model_optim = torch.optim.SGD(model.parameters(), lr=model_learning_rate, momentum=0.9, weight_decay=5e-4)
     model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
-    model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
+    #model_scheduler = torch.optim.lr_scheduler.CosineAnnealingLR(model_optim, eta_min=0, T_max=epochs)
     #model_optim = torch.optim.Adam(model.parameters(), lr=model_learning_rate)
     #dist_optim = torch.optim.SGD([theta], lr=dist_learning_rate, momentum=0)
     #dist_optim = torch.optim.Adam([theta], lr=dist_learning_rate)
@@ -273,8 +273,8 @@ def train(model: nn.Module,
             loss_change = model_loss_detached - prev_loss
             #model_loss_detached = torch.ones(1, dtype=torch.float32)
             if(use_dynamic_surrogate):
-                dist_loss += (loss_change) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
-                #dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp)) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
+                #dist_loss += (loss_change) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
+                dist_loss = (model_loss_detached - k_entropy * dist.entropy().detach() - k_temp * torch.log(prev_temp)) * dist.log_prob(prev_temp) # max -dloss + entropy => min dloss - entropy
                 if(train_steps % update_dist_freq == 0):
                     #print("update dist", train_steps, dist_loss)
                     #dist_loss /= update_dist_freq
@@ -298,7 +298,7 @@ def train(model: nn.Module,
             torch.save(model.state_dict(), "runs/saves/static_surrogate_" + cur_time + ".pt")
         acc = test(model, test_loader, timesteps=timesteps)
         writer.add_scalar("Accuracy/test", acc)
-        model_scheduler.step()
+        #model_scheduler.step()
         #dist_scheduler.step()
         print(f'Test accuracy after {epoch} epochs: {acc}')
         print(f'Average Loss: {total_loss / len(train_loader)}')
